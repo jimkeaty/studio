@@ -44,6 +44,9 @@ type DadPlan = {
     rolePlaySessions: number;
     trainingSessions: number;
     newAgentFollowUps: number;
+    recruitingFollowUpsDaily: number;
+    recruitingFollowUpsWeekly: number;
+    recruitingFollowUpsMonthly: number;
   };
   customKpis: CustomKpi[];
 };
@@ -64,6 +67,11 @@ const DEFAULT_PLAN: DadPlan = {
     rolePlaySessions: 4,
     trainingSessions: 0,
     newAgentFollowUps: 0,
+    // Recruiting follow-up targets must be approved and configured; zero keeps
+    // the metric visible but unscored until that happens.
+    recruitingFollowUpsDaily: 0,
+    recruitingFollowUpsWeekly: 0,
+    recruitingFollowUpsMonthly: 0,
   },
   customKpis: [],
 };
@@ -163,6 +171,9 @@ function normalizePlan(raw: any): DadPlan {
       rolePlaySessions: sanitizeNumber(sourceGoals.rolePlaySessions, DEFAULT_PLAN.monthlyGoals.rolePlaySessions),
       trainingSessions: sanitizeNumber(sourceGoals.trainingSessions, DEFAULT_PLAN.monthlyGoals.trainingSessions),
       newAgentFollowUps: sanitizeNumber(sourceGoals.newAgentFollowUps, DEFAULT_PLAN.monthlyGoals.newAgentFollowUps),
+      recruitingFollowUpsDaily: sanitizeNumber(sourceGoals.recruitingFollowUpsDaily, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsDaily),
+      recruitingFollowUpsWeekly: sanitizeNumber(sourceGoals.recruitingFollowUpsWeekly, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsWeekly),
+      recruitingFollowUpsMonthly: sanitizeNumber(sourceGoals.recruitingFollowUpsMonthly, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsMonthly),
     },
     customKpis: Array.isArray(customSource)
       ? customSource
@@ -225,11 +236,12 @@ export async function GET(req: NextRequest) {
     const weekEnd = ymd(addDays(fromYmd(weekStart), 6));
     const quarterStart = getQuarterStart(reportEnd);
 
-    const [planSnap, profileSnap, oneOnOneSnap, activitySnap, closedSnap, pendingSnap] = await Promise.all([
+    const [planSnap, profileSnap, oneOnOneSnap, activitySnap, recruitingActivitySnap, closedSnap, pendingSnap] = await Promise.all([
       adminDb.collection('recruitingPlans').doc(String(year)).get(),
       adminDb.collection('agentProfiles').get(),
       adminDb.collection('oneOnOnes').get(),
       adminDb.collection('directorDevelopmentActivities').where('year', '==', year).get(),
+      adminDb.collection('recruitingPipelineActivity').get(),
       adminDb.collection('transactions').where('status', '==', 'closed').get(),
       adminDb.collection('transactions').where('status', 'in', ['pending', 'under_contract']).get(),
     ]);
@@ -335,13 +347,26 @@ export async function GET(req: NextRequest) {
     const currentMonthActivityTotal = (type: string) => currentMonthActivities
       .filter(activity => activity.activityType === type)
       .reduce((total, activity) => total + sanitizeNumber(activity.count, 1), 0);
+    // Recruiting-pipeline contact history is the canonical prospect follow-up
+    // system. It deliberately does not read or write new-agent activity records,
+    // and retains contacts for every pipeline status, including legacy test-agent
+    // classifications when present in historical candidate data.
+    const recruitingFollowUps = recruitingActivitySnap.docs
+      .map(doc => doc.data() as any)
+      .filter(activity => ['call', 'email', 'text', 'meeting'].includes(String(activity.type || '')))
+      .filter(activity => within(isoDate(activity.createdAt), `${year}-01-01`, reportEnd));
+    const recruitingFollowUpsFor = (start: string, end: string) => recruitingFollowUps
+      .filter(activity => within(isoDate(activity.createdAt), start, end)).length;
     const metrics = [
       makeMetric('weekly_new_agent_one_on_ones', 'New Agent 1:1s — This Week', weeklyNew.actual, newAgent90.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 1–90 receive this exclusive weekly operational assignment.', weeklyNew.missing),
       makeMetric('monthly_under_year_one_on_ones', 'Agents Under 1 Year — This Month', monthlyUnderYear.actual, agentsUnderYear.length, 'agents', 'Active CGL and Charles Ditch Team agents on days 91–365 qualify only when they had production or a pending transaction in the inclusive last 60 days.', monthlyUnderYear.missing),
       makeMetric('monthly_no_production_one_on_ones', 'No Production or Pending in Last 60 Days — This Month', monthlyNoProduction.actual, noProductionOrPending.length, 'agents', `Active CGL and Charles Ditch Team agents with no closed or pending activity from ${eligibility.sixtyDayWindowStart} through ${reportEnd}; this category takes precedence over Under One Year.`, monthlyNoProduction.missing),
       makeMetric('quarterly_strategy_one_on_ones', 'All-Agent Strategy 1:1s — This Quarter', quarterlyAllCoverage.actual, quarterlyAll.length, 'agents', 'All active agents qualify regardless of team. Requires a completed quarterly 1:1 with completion notes and a strategic plan.', quarterlyAllCoverage.missing),
       makeMetric('weekly_relationship_meetings', 'In-Person Coffee / Lunch Meetings — This Week', relationshipMeetingsThisWeek.length, 4, 'meetings', 'Four in-person relationship meetings each week, outside the office, with current agents or recruiting prospects.'),
-      makeMetric('new_agent_follow_ups', 'New-Agent Follow-Ups — This Month', currentMonthActivityTotal('new_agent_follow_up'), plan.monthlyGoals.newAgentFollowUps, 'follow-ups', 'Log calls, meetings, or direct follow-up with new agents. Set the required monthly goal in Goals.'),
+      makeMetric('new_agent_follow_ups', 'New-Agent Onboarding Follow-Ups — This Month', currentMonthActivityTotal('new_agent_follow_up'), plan.monthlyGoals.newAgentFollowUps, 'follow-ups', 'Log calls, meetings, or direct onboarding follow-up with new agents. This is distinct from recruiting prospect contacts.'),
+      makeMetric('recruiting_follow_ups_daily', 'Recruiting Prospect Follow-Ups — Today', recruitingFollowUpsFor(reportEnd, reportEnd), plan.monthlyGoals.recruitingFollowUpsDaily, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Candidate stage does not affect the count; configure an approved daily target in Goals.'),
+      makeMetric('recruiting_follow_ups_weekly', 'Recruiting Prospect Follow-Ups — This Week', recruitingFollowUpsFor(weekStart, weekEnd), plan.monthlyGoals.recruitingFollowUpsWeekly, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Configure an approved weekly target in Goals.'),
+      makeMetric('recruiting_follow_ups_monthly', 'Recruiting Prospect Follow-Ups — This Month', recruitingFollowUpsFor(monthStart, monthEnd), plan.monthlyGoals.recruitingFollowUpsMonthly, 'completed contacts', 'Completed call, email, text, or meeting entries from the Recruiting Pipeline. Configure an approved monthly target in Goals.'),
       makeMetric('call_nights_held', 'Call Nights Held', activities.filter(activity => activity.activityType === 'call_night').length, monthsElapsed, 'nights', 'Target is one completed call night each month.'),
       makeMetric('call_night_hours', 'Call Night Hours', activityTotal('call_night', 'durationHours'), plan.monthlyGoals.callNightHours * monthsElapsed, 'hours', `Target is ${plan.monthlyGoals.callNightHours} hours per month; log actual call-night hours.`),
       makeMetric('recruiting_workshops', 'Recruiting Workshops', activityTotal('recruiting_workshop'), plan.monthlyGoals.recruitingWorkshops * monthsElapsed, 'workshops', `Target is ${plan.monthlyGoals.recruitingWorkshops} recruiting workshop(s) per month.`),
@@ -466,6 +491,9 @@ export async function POST(req: NextRequest) {
           rolePlaySessions: sanitizeNumber(monthlyGoals.rolePlaySessions, DEFAULT_PLAN.monthlyGoals.rolePlaySessions),
           trainingSessions: sanitizeNumber(monthlyGoals.trainingSessions, DEFAULT_PLAN.monthlyGoals.trainingSessions),
           newAgentFollowUps: sanitizeNumber(monthlyGoals.newAgentFollowUps, DEFAULT_PLAN.monthlyGoals.newAgentFollowUps),
+          recruitingFollowUpsDaily: sanitizeNumber(monthlyGoals.recruitingFollowUpsDaily, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsDaily),
+          recruitingFollowUpsWeekly: sanitizeNumber(monthlyGoals.recruitingFollowUpsWeekly, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsWeekly),
+          recruitingFollowUpsMonthly: sanitizeNumber(monthlyGoals.recruitingFollowUpsMonthly, DEFAULT_PLAN.monthlyGoals.recruitingFollowUpsMonthly),
         },
         customKpis: normalizeCustomKpis(body.customKpis),
         updatedAt: new Date().toISOString(),

@@ -50,7 +50,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   partner_event: 'Mortgage / Builder / RCA Event',
   team_appointments: 'Team Appointments',
   new_agent_welcome_call: 'New Agent Welcome Call',
-  new_agent_follow_up: 'New Agent Follow-Up',
+  new_agent_follow_up: 'New-Agent Onboarding Follow-Up',
   in_person_relationship_meeting: 'In-Person Coffee / Lunch Relationship Meeting',
   sales_meeting: 'Sales Meeting',
   huddle: 'Team Huddle',
@@ -124,6 +124,9 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
     rolePlaySessions: '4',
     trainingSessions: '0',
     newAgentFollowUps: '0',
+    recruitingFollowUpsDaily: '0',
+    recruitingFollowUpsWeekly: '0',
+    recruitingFollowUpsMonthly: '0',
     directorName: 'Ethan',
     customKpis: [] as Array<{ id: string; label: string; unit: string; monthlyGoal: string; active: boolean }>,
   });
@@ -163,6 +166,9 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
         rolePlaySessions: String(goals.rolePlaySessions ?? 4),
         trainingSessions: String(goals.trainingSessions ?? 0),
         newAgentFollowUps: String(goals.newAgentFollowUps ?? 0),
+        recruitingFollowUpsDaily: String(goals.recruitingFollowUpsDaily ?? 0),
+        recruitingFollowUpsWeekly: String(goals.recruitingFollowUpsWeekly ?? 0),
+        recruitingFollowUpsMonthly: String(goals.recruitingFollowUpsMonthly ?? 0),
         directorName: String(result.director?.name || result.plan?.directorName || 'Ethan'),
         customKpis: (result.plan?.customKpis || []).map((item: any) => ({ ...item, monthlyGoal: String(item.monthlyGoal ?? 0) })),
       });
@@ -356,7 +362,10 @@ export function DirectorDevelopmentReportCard({ year }: { year: number }) {
               ['buyerSellerWorkshops', 'Buyer & Seller Workshops / Month'],
               ['networkingEvents', 'Qualifying Events / Month (YPN, Mortgage, Builder, RCA)'],
               ['ypnEventsScheduled', 'Scheduled YPN Events / Month'],
-              ['newAgentFollowUps', 'New-Agent Follow-Ups / Month'],
+              ['newAgentFollowUps', 'New-Agent Onboarding Follow-Ups / Month'],
+              ['recruitingFollowUpsDaily', 'Recruiting Prospect Follow-Ups / Day'],
+              ['recruitingFollowUpsWeekly', 'Recruiting Prospect Follow-Ups / Week'],
+              ['recruitingFollowUpsMonthly', 'Recruiting Prospect Follow-Ups / Month'],
             ].map(([key, label]) => <div key={key} className="space-y-1.5"><Label>{label}</Label><Input type="number" min="0" value={(goalForm as any)[key]} onChange={event => setGoalForm(form => ({ ...form, [key]: event.target.value }))} /></div>)}
           </div>
           <div className="rounded-md border bg-slate-50 p-3 text-xs text-slate-700"><strong>YPN rule:</strong> record the number of scheduled YPN events here. The scorecard then expects the Director to log attendance at every one of them.</div>
