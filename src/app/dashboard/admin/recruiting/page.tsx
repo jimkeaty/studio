@@ -550,15 +550,15 @@ function GradeBadge({ grade, size = 'sm' }: { grade: string; size?: 'sm' | 'lg' 
 
 function Delta({ value, isCurrency = false }: { value: number | null; isCurrency?: boolean }) {
   if (value === null) return <span className="text-[10px] text-muted-foreground">Goal Not Set</span>;
-  if (value === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  if (value === 0) return <span className="text-muted-foreground text-xs">On Goal</span>;
   const positive = value > 0;
   const display = isCurrency
-    ? `${positive ? '+' : ''}$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-    : `${positive ? '+' : ''}${value.toLocaleString()}`;
+    ? `$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+    : `${Math.abs(value).toLocaleString()}`;
   return (
     <span className={`text-xs font-medium flex items-center gap-0.5 ${positive ? 'text-green-600' : 'text-red-600'}`}>
       {positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-      {display}
+      {positive ? 'Ahead By' : 'Behind By'} {display}
     </span>
   );
 }
@@ -631,7 +631,7 @@ function AgentStatusBadge({ status }: { status: string | null }) {
 
 // ── Agent Performance Roster ────────────────────────────────────────────────
 
-type SortField = 'name' | 'teamGroup' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
+type SortField = 'name' | 'startDate' | 'teamGroup' | 'engGrade' | 'apptGrade' | 'incomeGrade' | 'pipelineGrade' | 'incomeActual' | 'engActual' | 'apptActual' | 'graceStatus';
 type SortDir = 'asc' | 'desc';
 
 const GRADE_ORDER: Record<string, number> = { A: 4, B: 3, C: 2, D: 1, F: 0, 'N/A': -1 };
@@ -641,8 +641,8 @@ function AgentPerformanceRoster({ year }: { year: number }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<SortField>('incomeGrade');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortField, setSortField] = useState<SortField>('startDate');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [filterTeamGroup, setFilterTeamGroup] = useState<string>('all');
   const [filterGrace, setFilterGrace] = useState<string>('all');
@@ -779,6 +779,13 @@ function AgentPerformanceRoster({ year }: { year: number }) {
     let cmp = 0;
     switch (sortField) {
       case 'name': cmp = a.displayName.localeCompare(b.displayName); break;
+      case 'startDate': {
+        if (!a.startDate && !b.startDate) cmp = a.displayName.localeCompare(b.displayName);
+        else if (!a.startDate) cmp = 1;
+        else if (!b.startDate) cmp = -1;
+        else cmp = a.startDate.localeCompare(b.startDate);
+        break;
+      }
       case 'teamGroup': cmp = (a.teamGroup || '').localeCompare(b.teamGroup || ''); break;
       case 'engGrade': cmp = (GRADE_ORDER[a.engagementsGrade] ?? 0) - (GRADE_ORDER[b.engagementsGrade] ?? 0); break;
       case 'apptGrade': cmp = (GRADE_ORDER[a.appointmentsGrade] ?? 0) - (GRADE_ORDER[b.appointmentsGrade] ?? 0); break;
@@ -1142,7 +1149,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
             </div>
           </div>
           <CardDescription>
-            Live engagement, appointment, and income scorecard for all agents. Struggling agents (D/F) shown first. Use the “Reset Plan” button to restart an agent’s business plan from today.
+            Live scorecard ordered by newest canonical start date first. It uses each agent’s saved plan goals and year-to-date qualifying activity; missing start dates are listed last for correction.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1206,6 +1213,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     <TableHead className="sticky left-0 bg-muted/50 z-10 cursor-pointer" onClick={() => toggleSort('name')}>
                       <div className="flex items-center gap-1">Agent <SortIcon field="name" /></div>
                     </TableHead>
+                    <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('startDate')}><div className="flex items-center justify-center gap-1">Started <SortIcon field="startDate" /></div></TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('teamGroup')}>
                       <div className="flex items-center justify-center gap-1">Team Group <SortIcon field="teamGroup" /></div>
                     </TableHead>
@@ -1218,6 +1226,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('apptGrade')}>
                       <div className="flex items-center justify-center gap-1">Appts Held <SortIcon field="apptGrade" /></div>
                     </TableHead>
+                    <TableHead className="text-center">Calls</TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('incomeGrade')}>
                       <div className="flex items-center justify-center gap-1">Income <SortIcon field="incomeGrade" /></div>
                     </TableHead>
@@ -1246,6 +1255,8 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                           </div>
                         </div>
                       </TableCell>
+
+                      <TableCell className="text-center"><span className={a.startDate ? 'text-xs' : 'text-xs text-amber-700 font-medium'}>{a.startDate || 'Missing — correct profile'}</span></TableCell>
 
                       {/* Team Group */}
                       <TableCell className="text-center">
@@ -1278,6 +1289,8 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                           <Delta value={a.appointmentsDelta} />
                         </div>
                       </TableCell>
+
+                      <TableCell className="text-center"><div className="flex flex-col items-center gap-0.5"><span className="text-xs">{a.callsActual} / {a.callsGoalConfigured ? a.callsGoal : 'Goal Not Set'}</span><Delta value={a.callsDelta} /></div></TableCell>
 
                       {/* Income (closed only) */}
                       <TableCell className="text-center">
@@ -1410,16 +1423,24 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                 )}
 
                 {/* Grades Row */}
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="text-center">
                     <p className="text-[10px] text-muted-foreground mb-1">Engagements</p>
                     <GradeBadge grade={a.engagementsGrade} size="lg" />
-                    <p className="text-[10px] mt-0.5">{a.engagementsActual}/{a.engagementsGoal}</p>
+                    <p className="text-[10px] mt-0.5">{a.engagementsActual}/{a.engagementsGoalConfigured ? a.engagementsGoal : 'Goal Not Set'}</p>
+                    <Delta value={a.engagementsDelta} />
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-muted-foreground mb-1">Appts</p>
                     <GradeBadge grade={a.appointmentsGrade} size="lg" />
-                    <p className="text-[10px] mt-0.5">{a.appointmentsHeldActual}/{a.appointmentsHeldGoal}</p>
+                    <p className="text-[10px] mt-0.5">{a.appointmentsHeldActual}/{a.appointmentsHeldGoalConfigured ? a.appointmentsHeldGoal : 'Goal Not Set'}</p>
+                    <Delta value={a.appointmentsDelta} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground mb-1">Calls</p>
+                    <p className="text-lg font-bold leading-none">{a.callsActual}</p>
+                    <p className="text-[10px] mt-1">Goal {a.callsGoalConfigured ? a.callsGoal : 'Not Set'}</p>
+                    <Delta value={a.callsDelta} />
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-muted-foreground mb-1">Income</p>

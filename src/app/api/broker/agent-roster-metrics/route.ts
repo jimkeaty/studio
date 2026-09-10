@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
+import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
 
 
 function getBearerToken(req: NextRequest) {
@@ -108,6 +109,12 @@ export interface AgentRosterRow {
   engagementsPerf: number | null;
   engagementsGrade: string;
 
+  // Calls — same KPI year-to-date clock and agent-facing plan source
+  callsActual: number;
+  callsGoal: number | null;
+  callsGoalConfigured: boolean;
+  callsDelta: number | null;
+
   // Appointments Held
   appointmentsHeldActual: number;
   appointmentsHeldGoal: number | null;
@@ -194,10 +201,8 @@ export async function GET(req: NextRequest) {
     }
     const allProfileSnap = await noStatusQuery.get();
 
-    // Merge: use active ones + ones without a status field
-    // Agents who are inactive, terminated, or have moved to another team are excluded from the live roster.
-    // Their historical production remains attributed to the team via splitSnapshot.primaryTeamId on transactions.
-    const INACTIVE_STATUSES = new Set(['inactive', 'terminated', 'out', 'churned']);
+    // Merge profiles before one shared effective-date lifecycle pass below.
+    // This avoids excluding a future-dated Inactive/Out update prematurely.
     const profileMap = new Map<string, any>();
     for (const doc of profileSnap.docs) {
       profileMap.set(doc.id, { id: doc.id, ...doc.data() });
@@ -205,13 +210,7 @@ export async function GET(req: NextRequest) {
     for (const doc of allProfileSnap.docs) {
       if (!profileMap.has(doc.id)) {
         const d = doc.data();
-        // Include only if status is missing (legacy doc) OR explicitly active/grace_period
-        // Also check the agentStatus field as a fallback (some profiles use agentStatus instead of status)
-        const statusVal = (d.status ?? d.agentStatus ?? '') as string;
-        const isInactive = INACTIVE_STATUSES.has(statusVal.toLowerCase());
-        if (!isInactive && (!statusVal || statusVal === 'active' || statusVal === 'grace_period')) {
-          profileMap.set(doc.id, { id: doc.id, ...d });
-        }
+        profileMap.set(doc.id, { id: doc.id, ...d });
       }
     }
 
@@ -227,10 +226,7 @@ export async function GET(req: NextRequest) {
       if (DEMO_DISPLAY_NAMES.has(name)) profileMap.delete(id);
     }
 
-    const agents = [...profileMap.values()];
-    if (agents.length === 0) {
-      return NextResponse.json({ ok: true, year: yearNum, agents: [] });
-    }
+    const candidateAgents = [...profileMap.values()];
 
     // ── 2. Date calculations ──────────────────────────────────────────────
     const today = new Date();
@@ -238,6 +234,11 @@ export async function GET(req: NextRequest) {
     const yearStart = new Date(Date.UTC(yearNum, 0, 1));
     const yearEnd = new Date(Date.UTC(yearNum, 11, 31, 23, 59, 59, 999));
     const asOf = todayUtc.getTime() <= yearEnd.getTime() ? todayUtc : yearEnd;
+    const asOfDate = toYmd(asOf) || `${yearNum}-12-31`;
+    const agents = candidateAgents.filter(agent => classifyAgentLifecycle(agent, asOfDate).status === 'active');
+    if (agents.length === 0) {
+      return NextResponse.json({ ok: true, year: yearNum, agents: [] });
+    }
 
     // ── 3. Batch-fetch all transactions for the year ──────────────────────
     const txSnap = await adminDb.collection('transactions')
@@ -385,8 +386,10 @@ export async function GET(req: NextRequest) {
 
       // Engagement & appointment targets use KPI clock
       const dailyEngTarget = configuredNumber(plan.calculatedTargets?.engagements?.daily);
+      const dailyCallsTarget = configuredNumber(plan.calculatedTargets?.calls?.daily);
       const dailyApptHeldTarget = configuredNumber(plan.calculatedTargets?.appointmentsHeld?.daily);
       const engTarget = dailyEngTarget === null ? null : Number((dailyEngTarget * kpiElapsed).toFixed(2));
+      const callsTarget = dailyCallsTarget === null ? null : Number((dailyCallsTarget * kpiElapsed).toFixed(2));
       const apptHeldTarget = dailyApptHeldTarget === null ? null : Number((dailyApptHeldTarget * kpiElapsed).toFixed(2));
 
       // Income goals use financial clock
@@ -514,6 +517,11 @@ export async function GET(req: NextRequest) {
         engagementsPerf: engPerf,
         engagementsGrade: engPerf === null ? 'N/A' : (isGracePeriod ? 'A' : gradeFromPerformance(engPerf)),
 
+        callsActual: activity.calls,
+        callsGoal: callsTarget === null ? null : Number(callsTarget.toFixed(0)),
+        callsGoalConfigured: callsTarget !== null,
+        callsDelta: callsTarget === null ? null : Number((activity.calls - callsTarget).toFixed(0)),
+
         appointmentsHeldActual: activity.apptHeld,
         appointmentsHeldGoal: apptHeldTarget === null ? null : Number(apptHeldTarget.toFixed(0)),
         appointmentsHeldGoalConfigured: apptHeldTarget !== null,
@@ -564,9 +572,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Sort by engagement grade (worst first so admin sees struggling agents)
-    const gradeOrder: Record<string, number> = { F: 0, D: 1, C: 2, B: 3, A: 4, 'N/A': 5 };
-    rows.sort((a, b) => (gradeOrder[a.engagementsGrade] ?? 5) - (gradeOrder[b.engagementsGrade] ?? 5));
+    // SBUSA-016: newest canonical starts first; missing dates remain last.
+    rows.sort((a, b) => {
+      if (!a.startDate && !b.startDate) return a.displayName.localeCompare(b.displayName);
+      if (!a.startDate) return 1;
+      if (!b.startDate) return -1;
+      return b.startDate.localeCompare(a.startDate) || a.displayName.localeCompare(b.displayName);
+    });
 
     // ── 8. Summary stats ──────────────────────────────────────────────────
     const totalAgents = rows.length;
