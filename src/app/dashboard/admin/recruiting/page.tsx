@@ -14,7 +14,6 @@ import { RecruitingOperationsListView } from '@/components/dashboard/broker/Recr
 import { UnifiedRecruitingReportCard } from '@/components/dashboard/broker/UnifiedRecruitingReportCard';
 import { DirectorDevelopmentReportCard } from '@/components/dashboard/broker/DirectorDevelopmentReportCard';
 import { AttendanceManagementPanel } from '@/components/dashboard/broker/AttendanceManagementPanel';
-import { FaceToFaceRecruitingMeetings } from '@/components/dashboard/broker/FaceToFaceRecruitingMeetings';
 import { RecruiterTodoBoard } from '@/components/dashboard/broker/RecruiterTodoBoard';
 import { OneOnOneScheduler } from '@/components/dashboard/broker/OneOnOneScheduler';
 import { RecruitingGoalsSummary } from '@/components/dashboard/broker/RecruitingGoalsSummary';
@@ -1758,9 +1757,8 @@ export default function RecruitingDashboardPage() {
       </div>
 
       <Tabs defaultValue="admin-report-cards" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="admin-report-cards">Admin Report Cards</TabsTrigger>
-          <TabsTrigger value="face-to-face">Face-to-Face Meetings</TabsTrigger>
           <TabsTrigger value="operations">Staff List View</TabsTrigger>
           <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
@@ -1785,10 +1783,6 @@ export default function RecruitingDashboardPage() {
             inactiveAgents={activeAgentsData?.kpi?.inactiveAgents ?? []}
           />
           <RecruitingPipelinePanel initialViewMode="table" compact />
-        </TabsContent>
-
-        <TabsContent value="face-to-face" className="space-y-6 mt-6">
-          <FaceToFaceRecruitingMeetings year={year} />
         </TabsContent>
 
         {/* ── TAB 3: Admin Report Cards and recruiting controls ───────────── */}

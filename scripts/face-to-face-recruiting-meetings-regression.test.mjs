@@ -40,8 +40,9 @@ test('linked candidate follow-ups extend the existing recruiting pipeline histor
   assert.match(route, /collection\('recruitingPipeline'\)\.doc\(pipelineCandidateId\)/);
 });
 
-test('Recruiting and Development exposes a distinct Face-to-Face Meetings view', async () => {
+test('SBUSA-013 removes the dedicated dashboard Face-to-Face Meetings view without deleting its historical implementation', async () => {
   const page = await readFile(pagePath, 'utf8');
-  assert.match(page, /TabsTrigger value="face-to-face">Face-to-Face Meetings/);
-  assert.match(page, /<FaceToFaceRecruitingMeetings year=\{year\} \/>/);
+  assert.doesNotMatch(page, /TabsTrigger value="face-to-face">Face-to-Face Meetings/);
+  assert.doesNotMatch(page, /<FaceToFaceRecruitingMeetings year=\{year\} \/>/);
+  assert.doesNotMatch(page, /FaceToFaceRecruitingMeetings/);
 });
