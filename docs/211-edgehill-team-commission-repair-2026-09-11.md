@@ -1,6 +1,6 @@
 # 211 Edgehill Circle — Charles Ditch Team Commission Repair
 
-**Status:** Code repair validated locally; production transaction data intentionally unchanged pending an explicit one-record correction authorization.
+**Status:** Code repair published and the authorized one-record production correction completed and verified.
 
 ## Issue and verified evidence
 
@@ -18,28 +18,30 @@ The repair removes that implicit bypass. **Only an explicit `commissionOverride`
 
 211 Edgehill has `txComplianceFee: yes`, `txComplianceFeeAmount: 395`, and `txComplianceFeePaidBy: agent`. The shared Agent Take Home calculation subtracts that `$395` once from Scott’s gross member allocation and does not use it to alter Charles’s retained spread or Keaty Real Estate’s brokerage allocation.
 
-## Configuration decision still required for the existing record
+## Confirmed allocation and completed one-record correction
 
 The transaction-date preview, excluding this transaction itself, returns Scott’s cumulative progression after this close as `$46,184.75`. The currently stored Scott member plan applies **75%** between `$42,000` and `$84,000`; the current Charles Ditch Team structure applies **75% leader side / 25% Keaty Real Estate** below `$224,000`.
 
-Under those present canonical settings, 211 Edgehill would resolve to: Scott gross `$11,094.19`; Keaty Real Estate `$3,698.06`; Charles retained `$0.00`; Scott Agent Take Home `$10,699.19` after the `$395` agent-paid fee. This is mathematically consistent because Scott’s 75% equals the 75% leader side.
+Jim confirmed the allocation for **211 Edgehill only** as **Scott 70%, Charles 5%, Keaty Real Estate 25%**. On the recorded `$14,792.25` GCI, the corrected snapshot now persists Scott gross `$10,354.57`, Charles retained `$739.62`, and Keaty Real Estate `$3,698.06`; the amounts reconcile to the GCI after two-decimal rounding. The existing agent-paid `$395` fee remains separate, so Scott’s verified Agent Take Home is `$9,959.57`.
 
-If the intended policy is instead **Scott 70%, Charles 5%, Keaty Real Estate 25%**, Scott’s applicable member plan must be confirmed or corrected to 70% for this transaction’s tier before the one-record transaction correction. The system cannot truthfully produce 75% Scott, 25% Keaty Real Estate, and a positive Charles retained amount from the same commission base.
+At 2026-09-11 19:05 CDT, the public build marker verified `e5402ef-master`. The authorized administrative PATCH used the transaction’s saved version timestamp and succeeded for **only** `HfLVh27xq0SPCuNmEp69`. It now has `agentType: team`, `calculationModel: teamMember`, the Charles Ditch Team and member-plan IDs, three-way payout fields, and a credit snapshot that links Scott to Charles as the progression leader. The updated record was returned by the update route at `2026-09-11T19:07:30.635Z`.
+
+The route also rebuilt Charles’s affected 2026 rollup. An authorized read confirms `rebuiltAt: 2026-09-11T19:07:32.054Z`, immediately after the transaction update, with the expected April 15, 2026–April 14, 2027 cycle. No team plan, member plan, membership, fee rule, or other transaction was altered.
 
 ## Validation
 
 | Check | Result |
 | --- | --- |
-| Targeted TC allocation, leader-team, and Agent Take Home safeguards | Passed: 18 tests |
-| Full production prebuild safeguard suite | Passed: 230 tests |
-| Typecheck changed-file diagnostic scan | No diagnostic for the changed TC route or regression; repository retains unrelated historical typecheck diagnostics |
+| Targeted TC allocation, leader-team, Agent Take Home, and leader-rollup safeguards | Passed: 13 focused tests |
+| Full production prebuild safeguard suite | Passed: 231 tests |
+| Typecheck changed-file diagnostic scan | No diagnostic for the changed TC or admin-transaction routes or the regression; repository retains unrelated historical typecheck diagnostics |
 | Clean production build | Passed; optimized compilation and all 296 static pages completed |
 | `git diff --check` | Passed before checkpoint publication |
 
 ## Rollback
 
-Revert the commit that accompanies this document to restore the former TC approval behavior. No Firestore records, team memberships, team plans, member plans, rollups, fees, or notifications were changed by this repair.
+Revert commits `16d5692` and `e5402ef` to restore the former code behavior. The completed production correction is intentionally isolated to `HfLVh27xq0SPCuNmEp69`; reverting code does not revert Firestore data. If the one-record correction itself must be reversed, use a version-protected administrative update that restores its previous independent 70/30 snapshot only after a separate authorization.
 
 ## Required next action
 
-After Jim confirms the intended allocation for 211 Edgehill, perform one version-protected administrative update of **only** transaction `HfLVh27xq0SPCuNmEp69`, persist the canonical team snapshot and matching top-level payout fields, then re-read the record to verify the result. No bulk correction is authorized or planned.
+No further correction is pending for 211 Edgehill. Future closed team files approved through the repaired TC path will preserve their team snapshot unless an authorized editor explicitly sets a commission override. No bulk rewrite is authorized or planned.
