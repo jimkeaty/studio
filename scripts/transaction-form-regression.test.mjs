@@ -72,7 +72,7 @@ test('APHW education requests retain buyer and seller distinctions, consent, ale
 
 test('reopened shared transaction forms hydrate and submit their document list', () => {
   assert.match(formSource, /const hydratedDocs = \(Array\.isArray\(tx\.documents\) \? tx\.documents : \[\]\)/);
-  assert.match(formSource, /setUploadedDocs\(Array\.from\(new Map\(hydratedDocs\.map/);
+  assert.match(formSource, /setUploadedDocs\(Array\.from\(new Map(?:<string, UploadedDoc>)?\(hydratedDocs\.map/);
   assert.match(formSource, /documents: uploadedDocs,\s*\/\/ The hydrated document list is authoritative[\s\S]*?_replaceDocuments: true/);
   assert.match(agentRouteSource, /When _replaceDocuments=true \(delete\/archive\), use the provided array as-is/);
   assert.match(adminRouteSource, /'documents'/);

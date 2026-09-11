@@ -1292,6 +1292,10 @@ export default function AddTransactionPage() {
   const [agentCommission, setAgentCommission] = useState<AgentCommissionData | null>(null);
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [activeTier, setActiveTier] = useState<CommissionTier | null>(null);
+  // A closed team file carries its approved three-way payout snapshot. Keep that
+  // snapshot visible when reopening the file instead of replacing it with a
+  // present-day profile preview that may have moved to a later tier.
+  const [savedTeamSnapshotPreview, setSavedTeamSnapshotPreview] = useState<Record<string, any> | null>(null);
   const [viewerIsCoAgent, setViewerIsCoAgent] = useState(false);
   const [viewerParticipantAllocation, setViewerParticipantAllocation] = useState<Record<string, any> | null>(null);
   const [viewerAgentId, setViewerAgentId] = useState('');
@@ -2225,6 +2229,7 @@ export default function AddTransactionPage() {
   // administrative payout card cannot retain a prior co-agent allocation.
   useEffect(() => {
     setEditLoaded(false);
+    setSavedTeamSnapshotPreview(null);
     setViewerIsCoAgent(false);
     setViewerParticipantAllocation(null);
     setViewerAgentId('');
@@ -2262,6 +2267,36 @@ export default function AddTransactionPage() {
         editCommissionOverride.current = Boolean(tx.commissionOverridden);
         commissionManualOverride.current = editCommissionOverride.current;
         manualPercentageSplitEdited.current = false;
+        const savedSplitSnapshot = tx.splitSnapshot && typeof tx.splitSnapshot === 'object'
+          ? tx.splitSnapshot as Record<string, any>
+          : null;
+        const hasSavedTeamSnapshot = tx.calculationModel === 'teamMember'
+          && Number(savedSplitSnapshot?.grossCommission || 0) > 0
+          && Number(savedSplitSnapshot?.memberPaid || savedSplitSnapshot?.agentNetCommission || 0) > 0
+          && Number(savedSplitSnapshot?.leaderStructurePercent || 0) > 0;
+        if (hasSavedTeamSnapshot && savedSplitSnapshot) {
+          const grossCommission = Number(savedSplitSnapshot.grossCommission);
+          const memberPercent = Number(savedSplitSnapshot.memberPercentOfLeaderSide || 0);
+          const leaderPercent = Number(savedSplitSnapshot.leaderStructurePercent || 0);
+          const companyPercent = grossCommission > 0
+            ? Number(((Number(savedSplitSnapshot.companyRetained || 0) / grossCommission) * 100).toFixed(2))
+            : 0;
+          setSavedTeamSnapshotPreview(savedSplitSnapshot);
+          setActiveTier({
+            tierName: 'Saved team allocation',
+            fromCompanyDollar: 0,
+            toCompanyDollar: null,
+            agentSplitPercent: memberPercent,
+            companySplitPercent: companyPercent,
+            transactionFee: null,
+            capAmount: null,
+            notes: 'Approved transaction-specific team snapshot',
+            leaderStructurePercent: leaderPercent,
+            memberPercentOfLeaderSide: memberPercent,
+          });
+        } else {
+          setSavedTeamSnapshotPreview(null);
+        }
         // Manual GCI and gross-rate decisions have their own durable flags. Keep
         // legacy broad overrides compatible, but do not let a profile lookup or
         // seller-paid percentage overwrite a saved operational decision on reload.
@@ -2676,7 +2711,7 @@ export default function AddTransactionPage() {
             };
           })
           .filter((doc: UploadedDoc | null): doc is UploadedDoc => Boolean(doc));
-        setUploadedDocs(Array.from(new Map(hydratedDocs.map((doc) => [doc.storagePath, doc])).values()));
+        setUploadedDocs(Array.from(new Map<string, UploadedDoc>(hydratedDocs.map((doc: UploadedDoc) => [doc.storagePath, doc])).values()));
         // Also restore inspection row data
         if (tx.inspectionRowData) {
           const newRows: Record<string, any> = {};
@@ -3423,6 +3458,7 @@ export default function AddTransactionPage() {
     // Clear both percentages so the percentage-driven live calculation cannot
     // overwrite the manually entered broker and agent dollar amounts.
     commissionManualOverride.current = true;
+    setSavedTeamSnapshotPreview(null);
     if (value !== '' && value !== null && value !== undefined) {
       form.setValue('brokerPct', '' as any, { shouldDirty: true, shouldValidate: true });
       form.setValue('agentPct', '' as any, { shouldDirty: true, shouldValidate: true });
@@ -7609,11 +7645,18 @@ export default function AddTransactionPage() {
                     ) : activeTier ? (
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between flex-wrap gap-2">
-                          <span>
-                            <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
-                            Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
-                            {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee.toLocaleString('en-US')}`}
-                          </span>
+                          {savedTeamSnapshotPreview ? (
+                            <span>
+                              <strong>Saved team allocation</strong> &mdash;
+                              Agent {activeTier.agentSplitPercent}% / Leader {activeTier.leaderStructurePercent! - activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
+                            </span>
+                          ) : (
+                            <span>
+                              <strong>Auto-calculated</strong> using tier &quot;{activeTier.tierName}&quot; &mdash;
+                              Agent {activeTier.agentSplitPercent}% / Broker {activeTier.companySplitPercent}%
+                              {activeTier.transactionFee != null && ` / Fee $${activeTier.transactionFee.toLocaleString('en-US')}`}
+                            </span>
+                          )}
                           {commissionManualOverride.current && (
                             <Badge variant="outline" className="text-amber-700 border-amber-300">Manual Override</Badge>
                           )}
@@ -7654,6 +7697,7 @@ export default function AddTransactionPage() {
                         commissionManualOverride.current = false;
                         editCommissionOverride.current = false;
                         manualPercentageSplitEdited.current = false;
+                        setSavedTeamSnapshotPreview(null);
                         const gci = Number(form.getValues('gci')) || 0;
                         if (gci > 0 && agentCommission) {
                           const ytd2 = agentCommission.ytdTierProgressionGci ?? agentCommission.ytdTierProgressionCompanyDollar ?? 0;
@@ -7710,7 +7754,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="30"
-                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
+                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; setSavedTeamSnapshotPreview(null); field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>
@@ -7734,7 +7778,7 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="70"
-                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; field.onChange(e); }}
+                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; setSavedTeamSnapshotPreview(null); field.onChange(e); }}
                         />
                       </FormControl>
                     </FormItem>
