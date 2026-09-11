@@ -7,6 +7,7 @@ const read = (relativePath) => readFileSync(new URL(`../${relativePath}`, import
 const tcRoute = read('src/app/api/admin/tc/[id]/route.ts');
 const teamResolver = read('src/app/api/transactions/_lib/teamTransactionResolver.ts');
 const takeHome = read('src/lib/transactions/agentTakeHome.ts');
+const adminTransactionsRoute = read('src/app/api/admin/transactions/route.ts');
 
 test('normal TC approval uses the canonical team resolver even when the form carries calculated split fields', () => {
   assert.match(
@@ -41,4 +42,11 @@ test('an explicitly agent-paid transaction fee remains a separate Agent Take Hom
   assert.match(takeHome, /payer === 'agent'/);
   assert.match(takeHome, /return roundMoney\(Math\.max\(0, grossSplit - fee\)\)/);
   assert.doesNotMatch(takeHome, /leaderRetainedAfterMember/);
+});
+
+test('a controlled team-snapshot correction can persist leader credit and refresh the affected leader rollup', () => {
+  assert.match(adminTransactionsRoute, /'splitSnapshot', 'creditSnapshot', 'agentType', 'calculationModel', 'brokerProfit'/);
+  assert.match(adminTransactionsRoute, /const previousLeaderId = String\(existingData\?\.creditSnapshot\?\.progressionLeaderAgentId \|\| ''\)\.trim\(\)/);
+  assert.match(adminTransactionsRoute, /const currentLeaderId = String\(txData\?\.creditSnapshot\?\.progressionLeaderAgentId \|\| ''\)\.trim\(\)/);
+  assert.match(adminTransactionsRoute, /for \(const leaderId of leaderIds\)[\s\S]*?await rebuildAgentRollup\(adminDb, leaderId, txYear\)/);
 });

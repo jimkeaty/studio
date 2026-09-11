@@ -274,7 +274,7 @@ const UPDATABLE_FIELDS = new Set([
   'occupancyAgreement', 'occupancyDates',
   'shortageInCommission', 'shortageAmount', 'buyerBringToClosing',
   // Financial overrides
-  'splitSnapshot', 'brokerProfit',
+  'splitSnapshot', 'creditSnapshot', 'agentType', 'calculationModel', 'brokerProfit',
   // Split fields stored individually alongside splitSnapshot
   'agentPct', 'brokerPct', 'agentDollar', 'brokerGci',
   // Per-transaction commission override metadata
@@ -814,6 +814,18 @@ export async function PATCH(req: NextRequest) {
         if (oldYear && oldYear !== txYear) {
           await rebuildAgentRollup(adminDb, oldAgentId, oldYear);
         }
+      }
+      // A controlled correction can attach, replace, or remove a team leader
+      // credit on an existing transaction. Rebuild both the former and new
+      // leader once so leader tier progression cannot remain stale after the
+      // canonical transaction snapshot changes.
+      const previousLeaderId = String(existingData?.creditSnapshot?.progressionLeaderAgentId || '').trim();
+      const currentLeaderId = String(txData?.creditSnapshot?.progressionLeaderAgentId || '').trim();
+      const leaderIds = [...new Set([previousLeaderId, currentLeaderId])]
+        .filter((leaderId) => leaderId && leaderId !== agentId && leaderId !== coAgentId);
+      for (const leaderId of leaderIds) {
+        await rebuildAgentRollup(adminDb, leaderId, txYear);
+        if (oldYear && oldYear !== txYear) await rebuildAgentRollup(adminDb, leaderId, oldYear);
       }
     } catch (rollupErr: any) {
       console.warn('[api/admin/transactions PATCH] Rollup rebuild failed (non-fatal):', rollupErr?.message);
