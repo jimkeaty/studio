@@ -841,39 +841,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         };
         agentType = 'independent';
         calculationModel = 'override';
-      } else if (rawAgentDollar !== null && rawAgentDollar > 0) {
-        // ── Historical / manual override: use supplied numbers directly ──────
-        const grossCommission = rawGci > 0 ? rawGci : 0;
-        const companyRetained =
-          rawBrokerGci !== null && rawBrokerGci > 0
-            ? rawBrokerGci
-            : Math.max(0, grossCommission - rawAgentDollar);
-
-        splitSnapshot = {
-          primaryTeamId: null,
-          teamPlanId: null,
-          memberPlanId: null,
-          grossCommission,
-          agentSplitPercent: intake.agentPct ? toNum(intake.agentPct) : null,
-          companySplitPercent: intake.brokerPct ? toNum(intake.brokerPct) : null,
-          agentNetCommission: rawAgentDollar,
-          leaderStructurePercent: null,
-          leaderStructureGross: null,
-          memberPercentOfLeaderSide: null,
-          memberPaid: null,
-          leaderRetainedAfterMember: null,
-          companyRetained,
-        };
-
-        creditSnapshot = {
-          leaderboardAgentId: agentId,
-          leaderboardAgentDisplayName: agentDisplayName,
-          progressionMemberAgentId: null,
-          progressionLeaderAgentId: null,
-          progressionTeamId: null,
-          progressionCompanyDollarCredit: companyRetained,
-        };
       } else {
+        // The intake form keeps calculated agent/broker dollar fields so staff
+        // can review them. Those ordinary values must not be treated as a
+        // manual override: doing so bypasses the resolver and converts a
+        // leader-team deal into a generic 70/30 independent snapshot. Only
+        // the explicit commissionOverride branch above may preserve a manual
+        // allocation. All other approvals resolve the canonical profile,
+        // membership, member plan, and leader-team structure at the deal date.
         // ── Live calculation via team resolver ────────────────────────────────────────
         const commission = rawGci;
         const txDate = intake.closedDate || intake.contractDate || null;
