@@ -37,6 +37,21 @@ The repository knowledge base at `docs/transaction-save-and-commission-recovery-
 
 These safeguards cover the canonical operational paths and authorized editable fields. They do not prove that every unrelated screen, browser/device condition, or future code change can never fail. A reported issue should be diagnosed read-only first, repaired in the shared canonical path, protected by a targeted regression, and applied to production one record at a time only with authorization.
 
+## Deployment and final production readback
+
+The automatic App Hosting rollout for commit `2f13099` completed successfully. The public build marker reported `2f13099-master`, and authenticated, cache-busted, read-only requests to both `GET /api/admin/accounting-closeout?status=new` and `GET /api/admin/accounting-closeout?status=all` each returned **exactly one** matching item for transaction `i3QKmQYYXqumF18Rn64c`.
+
+| Production verification | Observed result |
+|---|---|
+| Canonical transaction status | `closed` |
+| Accounting status | `new` |
+| Accounting handoff timestamp | `2026-09-12T13:33:13.946Z` |
+| Queue visibility | One matching record in both New and All responses |
+| Accounting Queue screen | Renders one New case for `123 main test` with the expected transaction, source, commission, fee, broker, and Agent Take Home values |
+| Required closeout data | `inHouse` is still missing; this is a normal completion prerequisite, not a failed handoff |
+
+No Accounting action was taken during the verification. The test record remains a real, open New Accounting case, as intended.
+
 ## Release and rollback boundary
 
 The publication contains only the Accounting Queue query repair, its regression, its prebuild registration, and the two documentation checkpoints. It excludes local `.manus-notes/`, generated build artifacts, credentials, and the external skill directory.
