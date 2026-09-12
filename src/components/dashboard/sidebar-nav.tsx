@@ -259,6 +259,7 @@ export function SidebarNav() {
   const { isAdmin: showAdminMenu } = useIsAdminLike();
   const { isStaff, role } = useIsStaff();
   const isTcOnly = isStaff && !showAdminMenu && role === 'tc';
+  const isStaffOnly = isStaff && !showAdminMenu && role === 'staff';
   const isAccountingOnly = isStaff && !showAdminMenu && role === 'accounting';
   const { isImpersonating } = useImpersonation();
   const { plugins: agentPlugins } = useAgentPlugins();
@@ -465,6 +466,18 @@ export function SidebarNav() {
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/accounting">
+                  <SidebarMenuButton
+                    isActive={pathname.startsWith('/dashboard/admin/accounting')}
+                    tooltip="Accounting Queue"
+                    className="justify-start"
+                  >
+                    <Receipt className="h-4 w-4" />
+                    <span>Accounting Queue</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
             </SidebarMenu>
             <SidebarSeparator className="my-2" />
             <SidebarMenu>
@@ -478,6 +491,30 @@ export function SidebarNav() {
                   >
                     <Users className="h-4 w-4" />
                     <span>View Agent Dashboard</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        )}
+        {!isImpersonating && isStaffOnly && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarMenu>
+              <p className="px-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Transactions</p>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/staff-queue">
+                  <SidebarMenuButton isActive={pathname.startsWith('/dashboard/admin/staff-queue')} tooltip="Staff Queue" className="justify-start">
+                    <MapPin className="h-4 w-4" />
+                    <span>Staff Queue</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <Link href="/dashboard/admin/accounting">
+                  <SidebarMenuButton isActive={pathname.startsWith('/dashboard/admin/accounting')} tooltip="Accounting Queue" className="justify-start">
+                    <Receipt className="h-4 w-4" />
+                    <span>Accounting Queue</span>
                   </SidebarMenuButton>
                 </Link>
               </SidebarMenuItem>

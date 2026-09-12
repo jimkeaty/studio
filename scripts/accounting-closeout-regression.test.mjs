@@ -21,7 +21,7 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(staffQueue, /String\(txDocForAccounting\.data\(\)\?\.status \|\| ''\)\.toLowerCase\(\) === 'closed'/);
 });
 
-test('accounting snapshot presents the full requested transaction, commission, referral, fee, and payout review fields', () => {
+test('accounting snapshot supplies the full requested transaction, commission, referral, fee, and payout data to the list-first queue', () => {
   for (const field of [
     'propertyAddress', 'clientNames', 'leadSource', 'listingDate', 'contractDate', 'projectedCloseDate', 'listingExpirationDate', 'closeDate',
     'listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'brokerPercent', 'brokerGci', 'referral', 'agentPercent', 'agentNet', 'bonuses', 'totalAgentPayout',
@@ -35,8 +35,8 @@ test('accounting snapshot presents the full requested transaction, commission, r
   assert.match(closeout, /outboundReferralFeePercent/);
   assert.match(closeout, /'value' \| 'zero' \| 'missing' \| 'na'/);
   assert.match(closeout, /requiredAccountingFieldsMissing/);
-  assert.match(panel, /Transaction details/);
-  assert.match(panel, /Commission, referral, fees, and payout/);
+  assert.match(panel, /Client\(s\)/);
+  assert.match(panel, /Agent Take Home/);
   assert.match(panel, /totalAgentPayout/);
 });
 
@@ -45,17 +45,18 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(access, /isAccountingUser/);
   assert.match(route, /Only closed transactions can be processed by Accounting/);
   assert.match(route, /Required accounting fields are incomplete/);
-  assert.match(staffQueue, /getAccountingUids/);
+  assert.match(staffQueue, /getDesignatedAccountingUids/);
   assert.match(staffQueue, /accounting_closeout_new/);
   assert.match(staffQueue, /const alreadyInAccounting/);
 });
 
-test('the accounting queue supports taking, assigning, requesting information, N/A review, and completion', () => {
-  for (const action of ['take', 'assign', 'needs_information', 'set_field_state', 'complete', 'reopen']) {
+test('the accounting workflow is list-first, opens the full editor, and has no manual case assignment', () => {
+  for (const action of ['needs_information', 'set_field_state', 'complete', 'reopen']) {
     assert.match(route, new RegExp(`action === '${action}'`));
   }
-  assert.match(panel, /Take case/);
-  assert.match(panel, /Request information/);
-  assert.match(panel, /Mark \{field\} N\/A/);
-  assert.match(panel, /Accounting complete/);
+  assert.doesNotMatch(route, /action === 'take'/);
+  assert.doesNotMatch(route, /action === 'assign'/);
+  assert.doesNotMatch(panel, /Take case/);
+  assert.match(panel, /Open &amp; edit/);
+  assert.match(panel, /accountingCloseout=1/);
 });

@@ -28,6 +28,26 @@ export async function getAccountingUids(db: Firestore): Promise<string[]> {
   return resolveStaffUids(db, snap.docs);
 }
 
+/**
+ * Get the intentionally designated Accounting recipient for new closeout
+ * notifications. A single active Accounting user can be marked in Staff &
+ * Users. Older deployments without a designation retain the existing active
+ * Accounting/Office Admin fallback, so a handoff never becomes invisible.
+ */
+export async function getDesignatedAccountingUids(db: Firestore): Promise<string[]> {
+  const snap = await db
+    .collection('staffUsers')
+    .where('receivesAccountingCloseoutNotifications', '==', true)
+    .get();
+  const eligible = snap.docs.filter((doc) => {
+    const data = doc.data() as Record<string, any>;
+    return String(data.role || '') === 'accounting'
+      && String(data.status || 'active').toLowerCase() !== 'inactive';
+  });
+  const designated = await resolveStaffUids(db, eligible);
+  return designated.length > 0 ? designated : getAccountingUids(db);
+}
+
 /** Get UIDs of all staff users (role = 'office_admin', 'tc_admin', 'tc', or 'staff') */
 export async function getAllStaffUids(db: Firestore): Promise<string[]> {
   const snap = await db.collection('staffUsers').get();

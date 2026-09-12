@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const now = new Date();
     const updates: Record<string, any> = { updatedAt: now };
-    const allowed = ['displayName', 'phone', 'role', 'status', 'notificationPrefs'];
+    const allowed = ['displayName', 'phone', 'role', 'status', 'notificationPrefs', 'receivesAccountingCloseoutNotifications'];
     for (const field of allowed) {
       if (!(field in body)) continue;
       if (field === 'role') {
@@ -46,7 +46,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
       updates[field] = typeof body[field] === 'string' ? body[field].trim() : body[field];
     }
-    await docRef.update(updates);
+    const effectiveRole = String(body.role ?? doc.data()!.role ?? '');
+    if (body.receivesAccountingCloseoutNotifications === true && effectiveRole !== 'accounting') {
+      return jsonError(400, 'Only an Accounting user can be designated for new Accounting closeout notifications');
+    }
+    if (body.receivesAccountingCloseoutNotifications === true) {
+      const existingRecipients = await adminDb.collection('staffUsers')
+        .where('receivesAccountingCloseoutNotifications', '==', true)
+        .get();
+      const batch = adminDb.batch();
+      for (const existing of existingRecipients.docs) {
+        if (existing.id !== docRef.id) batch.update(existing.ref, { receivesAccountingCloseoutNotifications: false, updatedAt: now });
+      }
+      batch.update(docRef, updates);
+      await batch.commit();
+    } else {
+      await docRef.update(updates);
+    }
     // Sync phone + notificationPrefs to the users collection (used by sendNotification)
     // Normalise legacy camelCase 'inApp' key to canonical 'in_app' on the way in.
     const staffData = doc.data()!;

@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
-import { isAdminLike } from '@/lib/auth/staffAccess';
+import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifications/getRecipientUids';
 import { resolveGCI } from '@/lib/commissions';
@@ -1260,6 +1260,10 @@ export async function GET(
 
   const data = snap.data()!;
   const isAdmin = await isAdminLike(uid);
+  // Staff and TC users use the same full transaction editor for authorized
+  // closed-file corrections. They may open a selected Accounting Queue record
+  // without being limited to an agent ownership check; agents remain limited.
+  const isOperationalStaff = await isStaff(uid);
   const requestedViewerId = isAdmin ? String(req.nextUrl.searchParams.get('viewAs') || '').trim() : '';
   const requestedViewerName = isAdmin ? String(req.nextUrl.searchParams.get('viewAsName') || '').trim() : '';
   const viewerId = requestedViewerId || uid;
@@ -1334,7 +1338,7 @@ export async function GET(
       data.coListingAgentName,
     ].some(name => viewerNames.has(normalizeName(name)));
 
-  if (!isAdmin) {
+  if (!isAdmin && !isOperationalStaff) {
     if (!viewerIsPrimary && !viewerIsCoAgent) return jsonError(403, 'Forbidden');
   }
 

@@ -47,6 +47,7 @@ type StaffUser = {
   createdAt: string;
   updatedAt: string;
   notificationPrefs?: NotifPrefs;
+  receivesAccountingCloseoutNotifications?: boolean;
 };
 
 const ROLE_LABELS: Record<StaffRole, string> = {
@@ -89,6 +90,7 @@ const emptyForm = {
   phone: '',
   role: 'office_admin' as StaffRole,
   notificationPrefs: defaultNotifPrefs(),
+  receivesAccountingCloseoutNotifications: false,
 };
 
 export default function StaffUsersPage() {
@@ -287,6 +289,7 @@ export default function StaffUsersPage() {
       phone: staffUser.phone || '',
       role: staffUser.role,
       notificationPrefs: staffUser.notificationPrefs ?? defaultNotifPrefs(),
+      receivesAccountingCloseoutNotifications: Boolean(staffUser.receivesAccountingCloseoutNotifications),
     });
     setDialogOpen(true);
   };
@@ -419,6 +422,16 @@ export default function StaffUsersPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {form.role === 'accounting' && (
+                <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="pr-4">
+                    <p className="text-sm font-medium text-amber-950">Designated Accounting recipient</p>
+                    <p className="text-xs text-amber-900">New Accounting closeouts notify this one active Accounting user. Delivery still follows their in-app, email, and text preferences.</p>
+                  </div>
+                  <Switch checked={Boolean(form.receivesAccountingCloseoutNotifications)} onCheckedChange={(value) => setForm((current) => ({ ...current, receivesAccountingCloseoutNotifications: value }))} />
+                </div>
+              )}
 
               <Separator />
 

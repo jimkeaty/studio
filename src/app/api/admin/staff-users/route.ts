@@ -52,6 +52,10 @@ export async function POST(req: NextRequest) {
     if (newRole && !validRoles.includes(newRole)) {
       return jsonError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`);
     }
+    const isDesignatedAccountingRecipient = Boolean(body.receivesAccountingCloseoutNotifications);
+    if (isDesignatedAccountingRecipient && newRole !== 'accounting') {
+      return jsonError(400, 'Only an Accounting user can be designated for new Accounting closeout notifications');
+    }
 
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -102,13 +106,27 @@ export async function POST(req: NextRequest) {
       email: normalizedEmail,
       phone: phone?.trim() || null,
       role: newRole || 'office_admin',
+      receivesAccountingCloseoutNotifications: isDesignatedAccountingRecipient,
       status: 'active',
       firebaseUid,
       authCreated,
       createdAt: now,
       updatedAt: now,
     };
-    const docRef = await adminDb.collection('staffUsers').add(profileData);
+    const docRef = adminDb.collection('staffUsers').doc();
+    if (isDesignatedAccountingRecipient) {
+      const existingRecipients = await adminDb.collection('staffUsers')
+        .where('receivesAccountingCloseoutNotifications', '==', true)
+        .get();
+      const batch = adminDb.batch();
+      for (const existing of existingRecipients.docs) {
+        batch.update(existing.ref, { receivesAccountingCloseoutNotifications: false, updatedAt: now });
+      }
+      batch.set(docRef, profileData);
+      await batch.commit();
+    } else {
+      await docRef.set(profileData);
+    }
 
     // Seed the users/{uid} doc so sendNotification can resolve email/phone/prefs
     // without needing to fall back to staffUsers on every notification send.

@@ -78,8 +78,13 @@ export async function isStaff(uid: string): Promise<boolean> {
   return role !== null;
 }
 
-/** Returns true when a user may process Accounting closeout records. */
+/**
+ * Returns true when an active staff role may work an Accounting closeout.
+ * The Accounting Queue is an operational department workflow: Accounting,
+ * Staff, TC, TC Admin, and Office Admin may correct and complete a closed
+ * transaction, while agents remain excluded.
+ */
 export async function isAccountingUser(uid: string): Promise<boolean> {
   const role = await getStaffRole(uid);
-  return role === 'office_admin' || role === 'accounting';
+  return role !== null;
 }

@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/firebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { CheckCircle2, CircleAlert, Loader2, Receipt, RefreshCw, UserPlus } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CircleAlert, Loader2, Pencil, Receipt, RefreshCw, Search } from 'lucide-react';
 
 type AccountingFieldFormat = 'currency' | 'percent' | 'text' | 'date';
 type AccountingField = { id: string; label: string; required: boolean; state: string; value: string | number | boolean | null; detail?: string | null; format?: AccountingFieldFormat };
@@ -19,114 +20,157 @@ type AccountingItem = {
   transaction: { propertyAddress: string; mlsNumber: string; status: string };
   accounting: {
     status: 'new' | 'in_progress' | 'needs_information' | 'completed' | 'archived';
-    assignedToUid?: string | null;
-    assignedToName?: string | null;
-    notes?: string;
+    handedOffAt?: string | null;
     requiredMissing: string[];
-    fieldOverrides?: Record<string, 'na'>;
     snapshot: { fields: AccountingField[] };
   };
 };
-
-type AccountingUser = { uid: string; name: string; role: string };
 
 const statusLabel: Record<string, string> = {
   new: 'New', in_progress: 'In Progress', needs_information: 'Needs Information', completed: 'Completed', archived: 'Archived',
 };
 
-const fieldGroups = [
-  { title: 'Transaction details', fields: ['propertyAddress', 'clientNames', 'leadSource', 'transactionIdentifier', 'agents'] },
-  { title: 'Key dates and pricing', fields: ['listingDate', 'contractDate', 'projectedCloseDate', 'listingExpirationDate', 'closeDate', 'listPrice', 'salePrice'] },
-  { title: 'Commission, referral, fees, and payout', fields: ['commissionPercent', 'grossGci', 'transactionFee', 'listingFee', 'brokerPercent', 'brokerGci', 'referral', 'agentPercent', 'agentNet', 'bonuses', 'totalAgentPayout'] },
-  { title: 'Closing details', fields: ['inHouse', 'dualAgent', 'warranty'] },
-] as const;
+function field(item: AccountingItem, id: string) {
+  return item.accounting.snapshot.fields.find((entry) => entry.id === id);
+}
 
-function displayValue(value: string | number | boolean | null, detail?: string | null, format: AccountingFieldFormat = 'text') {
-  let base: string;
-  if (value === null || value === '') base = 'Not recorded';
-  else if (typeof value === 'boolean') base = value ? 'Yes' : 'No';
-  else if (typeof value === 'number' && format === 'currency') base = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  else if (typeof value === 'number' && format === 'percent') base = `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 }).format(value)}%`;
-  else base = String(value);
-  return detail ? `${base} · ${detail}` : base;
+function textValue(item: AccountingItem, id: string, fallback = '—') {
+  const value = field(item, id)?.value;
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
+
+function moneyValue(item: AccountingItem, id: string) {
+  const value = field(item, id)?.value;
+  const amount = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(amount)
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+    : '—';
+}
+
+function dateValue(item: AccountingItem, id: string) {
+  const value = textValue(item, id, '');
+  if (!value) return '—';
+  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function AccountingCloseoutQueue() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
+  const selectedTransactionId = searchParams?.get('transactionId') || '';
   const [items, setItems] = useState<AccountingItem[]>([]);
-  const [users, setUsers] = useState<AccountingUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
-  const [workingId, setWorkingId] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [needsInfo, setNeedsInfo] = useState<Record<string, string>>({});
-  const [assignee, setAssignee] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
     if (!user) return;
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       const token = await user.getIdToken();
-      const response = await fetch(`/api/admin/accounting-closeout?status=${filter}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(`/api/admin/accounting-closeout?status=${filter}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-store' },
+        cache: 'no-store',
+      });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to load Accounting Queue');
       setItems(data.items || []);
-      setUsers(data.accountingUsers || []);
     } catch (cause: any) {
       setError(cause.message || 'Unable to load Accounting Queue');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, [filter, user]);
 
   useEffect(() => { load(); }, [load]);
 
+  const visibleItems = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) => [
+      item.transaction.propertyAddress,
+      item.transaction.mlsNumber,
+      item.transactionId,
+      textValue(item, 'clientNames', ''),
+      textValue(item, 'agents', ''),
+      textValue(item, 'leadSource', ''),
+    ].some((value) => value.toLowerCase().includes(query)));
+  }, [items, search]);
+
   const counts = useMemo(() => items.reduce<Record<string, number>>((result, item) => {
-    result[item.accounting.status] = (result[item.accounting.status] || 0) + 1; return result;
+    result[item.accounting.status] = (result[item.accounting.status] || 0) + 1;
+    return result;
   }, {}), [items]);
 
-  const act = async (transactionId: string, action: string, extra: Record<string, unknown> = {}) => {
-    if (!user) return;
-    setWorkingId(transactionId);
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch('/api/admin/accounting-closeout', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ transactionId, action, ...extra }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || 'Accounting action failed');
-      await load();
-    } catch (cause: any) { setError(cause.message || 'Accounting action failed'); }
-    finally { setWorkingId(null); }
-  };
-
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold"><Receipt className="h-6 w-6 text-amber-600" />Accounting Closeout Queue</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Closed transactions remain Closed while Accounting completes its separate departmental closeout. Financial values are read from the current canonical transaction and split snapshot.</p>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Select a transaction to open the same full editor used by the Transaction Ledger. Accounting, Staff, TC, and Admin can correct transaction details and commissions, save them through the canonical transaction route, then complete Accounting from that edit screen.</p>
         </div>
-        <div className="flex gap-2"><Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent>{['all', 'new', 'in_progress', 'needs_information', 'completed'].map((value) => <SelectItem key={value} value={value}>{value === 'all' ? 'All cases' : statusLabel[value]}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></div>
+        <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-4"><Card><CardContent className="p-4"><div className="text-xl font-bold">{items.length}</div><div className="text-xs text-muted-foreground">Visible closeouts</div></CardContent></Card><Card><CardContent className="p-4"><div className="text-xl font-bold text-blue-700">{counts.new || 0}</div><div className="text-xs text-muted-foreground">New</div></CardContent></Card><Card><CardContent className="p-4"><div className="text-xl font-bold text-amber-700">{counts.needs_information || 0}</div><div className="text-xs text-muted-foreground">Need information</div></CardContent></Card><Card><CardContent className="p-4"><div className="text-xl font-bold text-emerald-700">{counts.completed || 0}</div><div className="text-xs text-muted-foreground">Completed</div></CardContent></Card></div>
+
+      <Alert>
+        <Receipt className="h-4 w-4" />
+        <AlertTitle>One shared Accounting queue</AlertTitle>
+        <AlertDescription>New closeouts notify the designated Accounting recipient according to that person’s notification preferences. Cases are not manually taken or assigned, so Staff and Accounting can work the same transaction when needed.</AlertDescription>
+      </Alert>
+
       {error && <Alert variant="destructive"><CircleAlert className="h-4 w-4" /><AlertTitle>Accounting Queue</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-      {items.length === 0 ? <Card><CardContent className="py-14 text-center text-sm text-muted-foreground">No closed transactions are currently awaiting Accounting closeout.</CardContent></Card> : items.map((item) => {
-        const accounting = item.accounting; const busy = workingId === item.transactionId;
-        const fieldMap = new Map(accounting.snapshot.fields.map((field) => [field.id, field]));
-        return <Card key={item.transactionId} className="overflow-hidden"><CardHeader className="border-b bg-muted/30 pb-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-base">{item.transaction.propertyAddress || 'Address missing'}</CardTitle><CardDescription>{item.transaction.mlsNumber ? `MLS ${item.transaction.mlsNumber}` : `Transaction ${item.transactionId}`}</CardDescription></div><div className="flex items-center gap-2"><Badge variant={accounting.status === 'completed' ? 'default' : accounting.status === 'needs_information' ? 'destructive' : 'secondary'}>{statusLabel[accounting.status]}</Badge>{accounting.assignedToName && <Badge variant="outline">{accounting.assignedToName}</Badge>}</div></div></CardHeader><CardContent className="space-y-5 pt-4">
-          <div className="grid gap-5 xl:grid-cols-2">
-            {fieldGroups.map((group) => <section key={group.title} className="space-y-2"><h2 className="border-b pb-1 text-sm font-semibold text-foreground">{group.title}</h2><div className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2">{group.fields.map((fieldId) => {
-              const field = fieldMap.get(fieldId); if (!field) return null;
-              const isMissing = field.state === 'missing' && accounting.fieldOverrides?.[field.id] !== 'na';
-              return <div key={field.id} className="flex min-h-8 items-start justify-between gap-3 border-b border-dashed py-1 text-sm"><span className="text-muted-foreground">{field.label}{field.required ? ' *' : ''}</span><span className={isMissing ? 'max-w-[62%] text-right font-medium text-destructive' : 'max-w-[62%] text-right font-medium'}>{accounting.fieldOverrides?.[field.id] === 'na' ? 'N/A' : displayValue(field.value, field.detail, field.format)}</span></div>;
-            })}</div></section>)}
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Card><CardContent className="p-4"><div className="text-xl font-bold">{items.length}</div><div className="text-xs text-muted-foreground">Visible closeouts</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-xl font-bold text-blue-700">{counts.new || 0}</div><div className="text-xs text-muted-foreground">New</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-xl font-bold text-amber-700">{counts.needs_information || 0}</div><div className="text-xs text-muted-foreground">Need information</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-xl font-bold text-emerald-700">{counts.completed || 0}</div><div className="text-xs text-muted-foreground">Completed</div></CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <CardTitle className="text-base">{visibleItems.length} closeout{visibleItems.length === 1 ? '' : 's'}</CardTitle>
+              <CardDescription>Open a transaction to make changes, save, and complete Accounting.</CardDescription>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+              <div className="relative sm:w-72"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search address, client, agent, or source" /></div>
+              <Select value={filter} onValueChange={setFilter}><SelectTrigger className="sm:w-44"><SelectValue /></SelectTrigger><SelectContent>{['all', 'new', 'in_progress', 'needs_information', 'completed'].map((value) => <SelectItem key={value} value={value}>{value === 'all' ? 'All cases' : statusLabel[value]}</SelectItem>)}</SelectContent></Select>
+            </div>
           </div>
-          {accounting.requiredMissing.length > 0 && <Alert><CircleAlert className="h-4 w-4" /><AlertTitle>Required closeout information is missing</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-2">{accounting.requiredMissing.map((field) => <Button key={field} size="sm" variant="outline" disabled={busy} onClick={() => act(item.transactionId, 'set_field_state', { fieldId: field, state: 'na' })}>Mark {field} N/A</Button>)}</AlertDescription></Alert>}
-          <div className="grid gap-3 border-t pt-4 lg:grid-cols-[1fr_auto]"><div className="space-y-2"><Label htmlFor={`notes-${item.transactionId}`}>Accounting notes</Label><Textarea id={`notes-${item.transactionId}`} value={notes[item.transactionId] ?? accounting.notes ?? ''} onChange={(event) => setNotes((prior) => ({ ...prior, [item.transactionId]: event.target.value }))} placeholder="Document reconciliation notes or final accounting detail." /><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={busy} onClick={() => act(item.transactionId, 'save_notes', { notes: notes[item.transactionId] ?? accounting.notes ?? '' })}>Save notes</Button><Input className="max-w-sm" value={needsInfo[item.transactionId] ?? ''} onChange={(event) => setNeedsInfo((prior) => ({ ...prior, [item.transactionId]: event.target.value }))} placeholder="Information requested from TC/Staff" /><Button size="sm" variant="outline" disabled={busy || !(needsInfo[item.transactionId] || '').trim()} onClick={() => act(item.transactionId, 'needs_information', { requestDetail: needsInfo[item.transactionId] })}>Request information</Button></div></div><div className="flex flex-wrap content-start gap-2 lg:justify-end">{!accounting.assignedToUid && <Button size="sm" disabled={busy} onClick={() => act(item.transactionId, 'take')}>Take case</Button>}<Select value={assignee[item.transactionId] || ''} onValueChange={(value) => setAssignee((prior) => ({ ...prior, [item.transactionId]: value }))}><SelectTrigger className="w-44"><SelectValue placeholder="Assign case" /></SelectTrigger><SelectContent>{users.map((entry) => <SelectItem key={entry.uid} value={entry.uid}>{entry.name}</SelectItem>)}</SelectContent></Select><Button size="sm" variant="outline" disabled={busy || !assignee[item.transactionId]} onClick={() => act(item.transactionId, 'assign', { assignedToUid: assignee[item.transactionId] })}><UserPlus className="mr-1 h-3.5 w-3.5" />Assign</Button>{accounting.status !== 'completed' ? <Button size="sm" disabled={busy || accounting.requiredMissing.length > 0} onClick={() => act(item.transactionId, 'complete')}><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Accounting complete</Button> : <Button size="sm" variant="outline" disabled={busy} onClick={() => act(item.transactionId, 'reopen')}>Reopen</Button>}</div></div>
-        </CardContent></Card>;
-      })}
+        </CardHeader>
+        <CardContent className="p-0">
+          {visibleItems.length === 0 ? (
+            <div className="py-14 text-center text-sm text-muted-foreground">No Accounting closeouts match this view.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow><TableHead className="min-w-[190px]">Address</TableHead><TableHead>Client(s)</TableHead><TableHead>Agent(s)</TableHead><TableHead>Lead source</TableHead><TableHead>Close date</TableHead><TableHead className="text-right">Sales price</TableHead><TableHead className="text-right">GCI</TableHead><TableHead className="text-right">Agent Take Home</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+                <TableBody>{visibleItems.map((item) => {
+                  const isSelected = item.transactionId === selectedTransactionId;
+                  return <TableRow key={item.transactionId} className={isSelected ? 'bg-amber-50/70 dark:bg-amber-950/20' : 'hover:bg-muted/40'}>
+                    <TableCell className="font-medium"><div className="max-w-52 truncate">{item.transaction.propertyAddress || 'Address missing'}</div><div className="mt-0.5 text-xs text-muted-foreground">{item.transaction.mlsNumber ? `MLS ${item.transaction.mlsNumber}` : `Transaction ${item.transactionId}`}</div></TableCell>
+                    <TableCell className="max-w-44 truncate text-sm">{textValue(item, 'clientNames')}</TableCell>
+                    <TableCell className="max-w-44 truncate text-sm">{textValue(item, 'agents')}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{textValue(item, 'leadSource')}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">{dateValue(item, 'closeDate')}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right font-medium">{moneyValue(item, 'salePrice')}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right font-medium text-emerald-700">{moneyValue(item, 'grossGci')}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right font-medium">{moneyValue(item, 'totalAgentPayout')}</TableCell>
+                    <TableCell><Badge variant={item.accounting.status === 'completed' ? 'default' : item.accounting.status === 'needs_information' ? 'destructive' : 'secondary'}>{statusLabel[item.accounting.status]}</Badge>{item.accounting.requiredMissing.length > 0 && <div className="mt-1 text-xs text-destructive">Needs {item.accounting.requiredMissing.length} field{item.accounting.requiredMissing.length === 1 ? '' : 's'}</div>}</TableCell>
+                    <TableCell className="text-right"><Link href={`/dashboard/transactions/new?edit=${item.transactionId}&accountingCloseout=1`}><Button size="sm" variant="outline" className="whitespace-nowrap"><Pencil className="mr-1.5 h-3.5 w-3.5" />Open &amp; edit</Button></Link></TableCell>
+                  </TableRow>;
+                })}</TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

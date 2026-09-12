@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
-import { getStaffRole, isAccountingUser } from '@/lib/auth/staffAccess';
-import { getAccountingUids, getTcUids } from '@/lib/notifications/getRecipientUids';
+import { isAccountingUser } from '@/lib/auth/staffAccess';
+import { getTcUids } from '@/lib/notifications/getRecipientUids';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import {
   buildAccountingSnapshot,
@@ -52,14 +52,6 @@ async function assertAccounting(req: NextRequest) {
   return { decoded, actor: await actorFrom(decoded.uid, decoded.email) };
 }
 
-async function accountingUsers() {
-  const snap = await adminDb.collection('staffUsers').where('status', '==', 'active').get();
-  return snap.docs
-    .map((doc) => ({ id: doc.id, ...serialize(doc.data()) }))
-    .filter((user: any) => ['accounting', 'office_admin'].includes(String(user.role)) && user.firebaseUid)
-    .map((user: any) => ({ uid: String(user.firebaseUid), name: String(user.displayName || user.email || user.firebaseUid), role: user.role }));
-}
-
 /** Returns the distinct accounting workflow stored inside canonical closed transaction records. */
 export async function GET(req: NextRequest) {
   try {
@@ -100,10 +92,10 @@ export async function GET(req: NextRequest) {
       .filter((item: any) => status === 'all' || item.accounting.status === status)
       .sort((a: any, b: any) => String(b.accounting.handedOffAt || '').localeCompare(String(a.accounting.handedOffAt || '')));
 
-    return NextResponse.json({ ok: true, items, accountingUsers: await accountingUsers() });
+    return NextResponse.json({ ok: true, items });
   } catch (cause: any) {
     if (cause?.message === 'UNAUTHORIZED') return error(401, 'Unauthorized');
-    if (cause?.message === 'FORBIDDEN') return error(403, 'Accounting or Office Admin access required');
+    if (cause?.message === 'FORBIDDEN') return error(403, 'Active Staff, TC, Admin, or Accounting access required');
     console.error('[accounting-closeout GET]', cause);
     return error(500, cause?.message || 'Unable to load accounting closeout queue');
   }
@@ -136,25 +128,7 @@ export async function POST(req: NextRequest) {
       title: string;
       body: string;
     } | null = null;
-    if (action === 'take') {
-      closeout.status = 'in_progress';
-      closeout.assignedToUid = decoded.uid;
-      closeout.assignedToName = actor.name;
-      closeout.assignedAt = now;
-      historyAction = 'Accounting case taken';
-      historyDetail = `${actor.name} took this accounting closeout case.`;
-    } else if (action === 'assign') {
-      const assignedToUid = String(body.assignedToUid || '').trim();
-      const assignees = await accountingUsers();
-      const assignee = assignees.find((entry) => entry.uid === assignedToUid);
-      if (!assignee) return error(400, 'Select an active Accounting or Office Admin user');
-      closeout.status = 'in_progress';
-      closeout.assignedToUid = assignee.uid;
-      closeout.assignedToName = assignee.name;
-      closeout.assignedAt = now;
-      historyAction = 'Accounting case assigned';
-      historyDetail = `${actor.name} assigned this accounting closeout case to ${assignee.name}.`;
-    } else if (action === 'needs_information') {
+    if (action === 'needs_information') {
       const request = String(body.requestDetail || '').trim();
       if (!request) return error(400, 'Describe the information Accounting needs');
       closeout.status = 'needs_information';
@@ -240,7 +214,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, accounting: serialize(closeout) });
   } catch (cause: any) {
     if (cause?.message === 'UNAUTHORIZED') return error(401, 'Unauthorized');
-    if (cause?.message === 'FORBIDDEN') return error(403, 'Accounting or Office Admin access required');
+    if (cause?.message === 'FORBIDDEN') return error(403, 'Active Staff, TC, Admin, or Accounting access required');
     console.error('[accounting-closeout POST]', cause);
     return error(500, cause?.message || 'Unable to update accounting closeout');
   }

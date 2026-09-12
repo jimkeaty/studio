@@ -43,6 +43,8 @@ test('Accounting users can control each closeout event through standard notifica
 
 test('closeout notification routing respects active staff records and user-level contact priority', () => {
   assert.match(recipients, /\['accounting', 'office_admin'\]/);
+  assert.match(recipients, /getDesignatedAccountingUids/);
+  assert.match(recipients, /receivesAccountingCloseoutNotifications/);
   assert.match(recipients, /String\(data\.status \|\| 'active'\)\.toLowerCase\(\) === 'inactive'/);
   assert.match(dispatcher, /if \(!resolvedEmail \|\| !resolvedName \|\| !resolvedPhone\)/);
   assert.match(dispatcher, /resolvedPhone = resolvedPhone \|\| String\(sd\.phone \|\| ''\)\.trim\(\)/);
@@ -71,6 +73,8 @@ test('Staff, TC, and Admin retain the full authorized editor while agents remain
   assert.match(tcRoute, /mergeOperationalDirectSplit/);
   assert.match(agentTransactions, /Closed transactions cannot be edited by agents/);
   assert.match(agentTransactions, /txData\.status === 'closed'/);
+  assert.match(agentTransactions, /isOperationalStaff/);
+  assert.match(operationalFields, /'isInHouse'/);
 });
 
 test('Admin can assign Accounting and Staff roles with linked notification profiles', () => {
@@ -84,9 +88,9 @@ test('Admin can assign Accounting and Staff roles with linked notification profi
   assert.match(staffUsersPage, /accounting: 'Accounting'/);
 });
 
-test('the Accounting role has the approved Admin, TC, and Accounting operational access without broadening agent permissions', () => {
+test('the shared Accounting workflow permits active operational staff without broadening agent permissions', () => {
   assert.match(staffAccess, /return role === 'office_admin' \|\| role === 'tc_admin' \|\| role === 'accounting'/);
-  assert.match(staffAccess, /return role === 'office_admin' \|\| role === 'accounting'/);
+  assert.match(staffAccess, /return role !== null/);
   assert.match(staffAccess, /!allSnap\.empty && !allSnap\.docs\[0\]\.data\(\)\.status/);
   assert.match(adminHook, /full-access 'accounting'/);
   assert.match(staffHook, /staffRole === 'office_admin' \|\| staffRole === 'tc_admin' \|\| staffRole === 'accounting'/);
@@ -96,6 +100,7 @@ test('the Accounting role has the approved Admin, TC, and Accounting operational
   assert.match(onboarding, /role === 'office_admin' \|\| role === 'tc_admin' \|\| role === 'accounting'/);
   assert.match(tcQueuePage, /u\.role === 'tc' \|\| u\.role === 'tc_admin' \|\| u\.role === 'accounting'/);
   assert.match(sidebar, /const \{ isAdmin: showAdminMenu \} = useIsAdminLike\(\)/);
+  assert.match(sidebar, /const isStaffOnly/);
   assert.match(agentTransactions, /Closed transactions cannot be edited by agents/);
 });
 

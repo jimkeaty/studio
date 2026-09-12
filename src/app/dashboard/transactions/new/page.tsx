@@ -585,6 +585,7 @@ const schema = z.object({
   buyerClosingCostOther: z.coerce.number().min(0).optional().or(z.literal('')),
 
   // Additional info
+  isInHouse: optionalYesNo,
   warrantyAtClosing: optionalYesNo,
   warrantyAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   warrantyPaidBy: z.string().optional(),
@@ -691,6 +692,7 @@ export default function AddTransactionPage() {
   const intakeId = urlSearchParams?.get('intakeId') ?? null;
   const queueRole = urlSearchParams?.get('role') ?? null; // 'tc' | 'staff' | null
   const isTcQueueMode = Boolean(intakeId && (queueRole === 'tc' || queueRole === 'staff'));
+  const isAccountingCloseoutMode = editMode && urlSearchParams?.get('accountingCloseout') === '1';
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -705,6 +707,7 @@ export default function AddTransactionPage() {
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [intakeApproving, setIntakeApproving] = useState(false);
+  const [accountingCompleting, setAccountingCompleting] = useState(false);
   const lastSaveSucceededRef = useRef(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
@@ -1481,6 +1484,7 @@ export default function AddTransactionPage() {
       txComplianceFeePrimaryAgentAmount: '',
       txComplianceFeeCoAgentAmount: '',
       agentBonusPassThrough: '',
+      isInHouse: '',
       buyerWarrantyEducationRequested: '',
       sellerWarrantyEducationRequested: '',
       hasOutboundReferral: false,
@@ -2317,6 +2321,10 @@ export default function AddTransactionPage() {
           if (typeof candidate === 'boolean' || candidate === null || candidate === undefined) return fallback;
           return String(candidate);
         };
+        const safeYesNo = (val: unknown, fallback = '') => {
+          if (typeof val === 'boolean') return val ? 'yes' : 'no';
+          return safeEnum(val, fallback);
+        };
         const safeStringArray = (val: unknown): string[] => {
           if (Array.isArray(val)) return val.filter((item): item is string => typeof item === 'string');
           return typeof val === 'string' ? [val] : [];
@@ -2567,6 +2575,7 @@ export default function AddTransactionPage() {
           depositHolder: safeEnum(tx.depositHolder, ''),
           depositHolderOther: tx.depositHolderOther || '',
           buyerClosingCostTotal: tx.buyerClosingCostTotal || '',
+          isInHouse: safeYesNo(tx.isInHouse ?? tx.inHouse ?? tx.inHouseTransaction, ''),
           warrantyAtClosing: safeEnum(tx.warrantyAtClosing, ''),
           warrantyAmount: tx.warrantyAmount || '',
           warrantyPaidBy: tx.warrantyPaidBy || '',
@@ -3455,6 +3464,36 @@ export default function AddTransactionPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  const saveAndCompleteAccounting = async () => {
+    if (!user || !editTxId || !hasOperationalEditAuthority) return;
+    setAccountingCompleting(true);
+    try {
+      lastSaveSucceededRef.current = false;
+      await form.handleSubmit(onSubmit, handleInvalidSubmit)();
+      if (!lastSaveSucceededRef.current) return;
+
+      const token = await user.getIdToken();
+      const response = await fetch('/api/admin/accounting-closeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ transactionId: editTxId, action: 'complete' }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        const missing = Array.isArray(data.missing) && data.missing.length
+          ? ` Complete the required Accounting fields: ${data.missing.join(', ')}.`
+          : '';
+        throw new Error(`${data.error || 'Could not complete Accounting closeout.'}${missing}`);
+      }
+      toast({ title: 'Accounting completed', description: 'The transaction changes were saved and this Accounting closeout is complete.' });
+      router.push('/dashboard/admin/accounting');
+    } catch (err: any) {
+      toast({ title: 'Accounting completion failed', description: err.message || 'Could not complete Accounting closeout.', variant: 'destructive' });
+    } finally {
+      setAccountingCompleting(false);
+    }
+  };
+
   const setManualDollarSplit = (field: 'brokerGci' | 'agentDollar', value: unknown) => {
     // A deliberate dollar override and a percentage split are competing inputs.
     // Clear both percentages so the percentage-driven live calculation cannot
@@ -3490,10 +3529,12 @@ export default function AddTransactionPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {editMode ? 'Edit Transaction' : 'Add Transaction'}
+            {isAccountingCloseoutMode ? 'Accounting Closeout' : editMode ? 'Edit Transaction' : 'Add Transaction'}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {editMode
+            {isAccountingCloseoutMode
+              ? 'Review and correct any transaction or commission field. Save changes, then complete the Accounting closeout when all required closing details are recorded.'
+              : editMode
               ? isClosedAgentView
                 ? 'This transaction is closed and is available for review only. Contact your admin, staff, or TC if a correction is needed.'
                 : 'Make changes below and click Save Changes when done.'
@@ -3501,9 +3542,23 @@ export default function AddTransactionPage() {
           </p>
         </div>
         <Badge variant="outline" className="mt-1">
-          <ClipboardList className="h-3 w-3 mr-1" /> TC Queue Review
+          <ClipboardList className="h-3 w-3 mr-1" /> {isAccountingCloseoutMode ? 'Accounting Review' : 'TC Queue Review'}
         </Badge>
       </div>
+
+      {isAccountingCloseoutMode && editTxId && hasOperationalEditAuthority && (
+        <div className="sticky top-0 z-40 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-amber-300 bg-background/95 px-4 py-3 shadow-md backdrop-blur">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => router.push('/dashboard/admin/accounting')} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">← Accounting Queue</button>
+            <span className="text-xs text-muted-foreground">|</span>
+            <span className="text-xs font-semibold text-foreground">Accounting Closeout — Full transaction editor</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={submitting || accountingCompleting} onClick={() => form.handleSubmit(onSubmit, handleInvalidSubmit)()}>Save changes</Button>
+            <Button type="button" size="sm" disabled={submitting || accountingCompleting} onClick={saveAndCompleteAccounting}>{accountingCompleting ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Completing…</> : 'Save & complete Accounting'}</Button>
+          </div>
+        </div>
+      )}
 
       {pdfStep === 'loading' && (
         <Card>
@@ -6954,6 +7009,16 @@ export default function AddTransactionPage() {
               Moved above Buyer Closing Cost so agents fill in these details before entering commission.
           ─────────────────────────────────────────────────────────────────── */}
           {watchedClosingType !== 'referral' && <Section title="Additional Info">
+            {hasOperationalEditAuthority && <FormField control={form.control} name="isInHouse" render={({ field }) => (
+              <FormItem>
+                <FormLabel>In-house transaction?</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select yes or no" /></SelectTrigger></FormControl>
+                  <SelectContent><SelectItem value="yes">Yes</SelectItem><SelectItem value="no">No</SelectItem></SelectContent>
+                </Select>
+                <FormDescription>Required before completing Accounting closeout. This is saved on the canonical transaction.</FormDescription>
+              </FormItem>
+            )} />}
             {/* Warranty */}
             <FormField control={form.control} name="warrantyAtClosing" render={({ field }) => (
               <FormItem>

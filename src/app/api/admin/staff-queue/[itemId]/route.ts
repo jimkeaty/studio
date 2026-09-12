@@ -5,7 +5,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getTcUids } from '@/lib/notifications/getRecipientUids';
-import { getAccountingUids } from '@/lib/notifications/getRecipientUids';
+import { getDesignatedAccountingUids } from '@/lib/notifications/getRecipientUids';
 import { handoffClosedTransactionToAccounting } from '@/lib/transactions/accountingCloseout';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
@@ -630,7 +630,7 @@ export async function PATCH(
             email: reviewerEmail,
           });
           if (!alreadyInAccounting) {
-            const accountingUids = await getAccountingUids(adminDb);
+            const accountingUids = await getDesignatedAccountingUids(adminDb);
             if (accountingUids.length > 0) {
               const txAddress = String(txDocForAccounting.data()?.propertyAddress || txDocForAccounting.data()?.address || 'a closed transaction');
               await sendNotification(adminDb, {

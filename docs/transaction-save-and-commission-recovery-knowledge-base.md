@@ -36,6 +36,20 @@ Source-specific plan rules must be read from the assigned agent/member plan as c
 
 The prebuild suite protects source-aware CGL splits, flat-dollar persistence, direct percentage/dollar override behavior, transaction version guards, pass-through policy, team snapshots, agent take-home treatment, Staff-to-Accounting handoff, and closed-file historical tier behavior. Run the reusable **Smart Broker Team Commission Recovery** skill when a staff member reports a related issue.
 
+## Accounting Queue Working Model
+
+The Accounting Queue is a **list-first index of canonical closed transactions**, not a separate editable transaction store. Staff, TC, Admin, and Accounting users select a queue row and open the established full transaction editor. That editor uses the version-safe Admin transaction save route, preserves source-aware and explicit commission rules, and exposes a **Save & complete Accounting** action only after a successful transaction save.
+
+| Requirement | Safeguard |
+|---|---|
+| Visibility | Query the canonical `accountingCloseout.status` index, then retain the Closed-transaction invariant. Never scan a capped historical Closed-record subset. |
+| Editing | Make edits only in the full transaction editor, including commissions and the required in-house value. Do not create a parallel Accounting-only transaction editor. |
+| Completion | Save the canonical transaction first; then request Accounting completion. Missing required closeout values return a named error rather than completing a partial record. |
+| Assignment | Do not use manual “Take case” or case-assignment actions. The queue is shared by authorized operational staff. |
+| Notification | One active Accounting user may be marked as the designated closeout recipient in **Staff & Users**. New handoffs respect that person’s existing in-app, email, and SMS preferences. If no designation exists, the active Accounting/Office Admin fallback prevents an unseen handoff. |
+
+The designated-recipient setting is operational configuration, not a transaction mutation. It should be changed only by an authorized administrator and checked after role or staff-status changes. Existing transaction records are not rewritten when the recipient changes.
+
 ## Limits and Escalation
 
 An automated safeguard proves the tested code path, not every future staff workflow or browser/device condition. When an issue appears, use the runbook to capture exact transaction and role context, preserve the current record, and test the affected route before changing payout data. Do not bulk rewrite historical transactions or plans without record-by-record evidence and explicit authorization.
