@@ -65,12 +65,21 @@ export async function GET(req: NextRequest) {
   try {
     await assertAccounting(req);
     const status = new URL(req.url).searchParams.get('status') || 'all';
-    const snap = await adminDb.collection('transactions').where('status', '==', 'closed').limit(1000).get();
+    // Accounting handoff state is the queue's canonical index. Query it directly
+    // instead of scanning an arbitrary limited subset of all Closed transactions;
+    // otherwise newer handoffs can be omitted from the visible queue even though
+    // their accountingCloseout record was successfully created.
+    const ACCOUNTING_QUEUE_STATUSES = ['new', 'in_progress', 'needs_information', 'completed', 'archived'];
+    const snap = await adminDb.collection('transactions')
+      .where('accountingCloseout.status', 'in', ACCOUNTING_QUEUE_STATUSES)
+      .get();
     const items = snap.docs
       .map((doc) => {
         const transaction = doc.data() as Record<string, any>;
         const accounting = transaction.accountingCloseout as Record<string, any> | undefined;
-        if (!accounting || !accounting.status) return null;
+        // A handoff is created only for a Closed transaction. Keep that workflow
+        // invariant in the response in case a legacy record was later reopened.
+        if (String(transaction.status || '').toLowerCase() !== 'closed' || !accounting || !accounting.status) return null;
         const currentSnapshot = buildAccountingSnapshot(transaction, doc.id);
         const fieldOverrides = (accounting.fieldOverrides || {}) as Record<string, 'na'>;
         return {
