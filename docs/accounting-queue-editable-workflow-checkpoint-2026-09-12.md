@@ -24,10 +24,12 @@ Jim requested that the Accounting Queue become a transaction list rather than a 
 | Production build | Passed. The build compiled successfully and generated all 296 static pages. |
 | Typecheck | Retains the established nonzero baseline from generated Next route-context/historic diagnostics. The only matched line concerned the pre-existing `staff-users/[userId]/relink` generated route type; there were no diagnostics for the changed Accounting Queue, full editor, recipient helper, transaction route, or staff-user setting implementation. |
 
-## Production Configuration After Rollout
+## Production Deployment and Configuration
 
-The live Staff User record for **Lainie Harrington** was verified read-only as an active `accounting` user with a linked Firebase account. After the published build becomes live, set `receivesAccountingCloseoutNotifications` to `true` only on Lainie’s existing Staff & Users record. That operation configures the designated notification recipient; it does not send a test notification, change any transaction, or assign any Accounting case.
+The repository-triggered App Hosting rollout completed successfully, and the public build marker reported **`eb666c2-master`**. Lainie Harrington’s live Staff & Users record was verified as an active linked `accounting` user. The authorized **Designated Accounting recipient** setting was enabled and saved on that record. Her existing In-App and Email delivery preferences remained enabled, while SMS remained disabled; future new-closeout notifications follow those preferences.
+
+The live Accounting Queue now rendered `123 Main Test` as one highlighted table row, with the expected client, agent, BoomTown source, close date, $300,000 sale price, $9,000 GCI, $5,005 Agent Take Home, missing-field indicator, and **Open & edit** action. Opening that action loaded the full Accounting Closeout transaction editor and its editable in-house field plus **Save changes** and **Save & complete Accounting** controls. This was a read-only verification: no test notification was sent and no transaction save, completion, assignment, or status action was submitted.
 
 ## Boundaries and Rollback
 
-This change does not close, reopen, take, assign, or alter `123 Main Test` or any other Accounting case. It makes its already-persisted New case accessible through the correct workflow. Rollback is a code revert of this checkpoint’s commit; it does not require rewriting canonical transactions. If needed, removing the designation flag restores the existing active Accounting/Office Admin notification fallback without affecting closeout records.
+This change does not close, reopen, take, assign, or alter `123 Main Test` or any other Accounting case. It makes the already-persisted closeout accessible through the correct workflow. Rollback is a code revert of this checkpoint’s commit; it does not require rewriting canonical transactions. If needed, removing the designation flag restores the existing active Accounting/Office Admin notification fallback without affecting closeout records.
