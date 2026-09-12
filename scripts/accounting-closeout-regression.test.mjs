@@ -16,6 +16,8 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(closeout, /processingHistory/);
   assert.match(closeout, /TC\/Staff closeout completed and the closed transaction was sent to Accounting/);
   assert.match(staffQueue, /handoffClosedTransactionToAccounting/);
+  assert.match(staffQueue, /action === 'approve' \|\| action === 'complete'/);
+  assert.match(staffQueue, /const shouldHandoffClosedTransaction/);
   assert.match(staffQueue, /String\(txDocForAccounting\.data\(\)\?\.status \|\| ''\)\.toLowerCase\(\) === 'closed'/);
 });
 
@@ -45,6 +47,7 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(route, /Required accounting fields are incomplete/);
   assert.match(staffQueue, /getAccountingUids/);
   assert.match(staffQueue, /accounting_closeout_new/);
+  assert.match(staffQueue, /const alreadyInAccounting/);
 });
 
 test('the accounting queue supports taking, assigning, requesting information, N/A review, and completion', () => {

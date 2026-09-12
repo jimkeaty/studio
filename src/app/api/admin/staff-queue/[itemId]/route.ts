@@ -517,36 +517,6 @@ export async function PATCH(
       itemUpdates.reviewedAt = now;
       logAction = 'Completed';
       logDetail = `Completed by ${reviewerEmail}`;
-
-      // A closed transaction keeps its canonical business status of Closed. This is
-      // only a departmental handoff: TC/Staff closeout is complete and Accounting
-      // receives its own configurable closeout state on the same transaction.
-      if (item.transactionId) {
-        const txDocForAccounting = await adminDb.collection('transactions').doc(item.transactionId).get();
-        if (txDocForAccounting.exists && String(txDocForAccounting.data()?.status || '').toLowerCase() === 'closed') {
-          try {
-            await handoffClosedTransactionToAccounting(adminDb, item.transactionId, {
-              uid: decoded.uid,
-              name: reviewerName,
-              email: reviewerEmail,
-            });
-            const accountingUids = await getAccountingUids(adminDb);
-            if (accountingUids.length > 0) {
-              const txAddress = String(txDocForAccounting.data()?.propertyAddress || txDocForAccounting.data()?.address || 'a closed transaction');
-              await sendNotification(adminDb, {
-                type: 'accounting_closeout_new',
-                recipientUids: accountingUids,
-                title: 'New Accounting Closeout',
-                body: `${txAddress} is ready for Accounting review.`,
-                url: `/dashboard/admin/accounting?transactionId=${item.transactionId}`,
-                data: { transactionId: item.transactionId },
-              });
-            }
-          } catch (accountingError: any) {
-            console.error('[staff-queue PATCH] Accounting handoff failed:', accountingError?.message);
-          }
-        }
-      }
     } else if (action === 'dismiss') {
       itemUpdates.status = 'dismissed';
       itemUpdates.reviewedBy = decoded.uid;
@@ -640,6 +610,42 @@ export async function PATCH(
           body: notifBody,
           url: '/dashboard/transactions',
         }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
+      }
+    }
+
+    // A Staff Queue approval is the user-facing closeout action in the unified
+    // transaction editor. For a transaction already marked Closed, both that
+    // approval and an explicit queue completion must create the same idempotent
+    // departmental Accounting handoff on the canonical transaction.
+    const shouldHandoffClosedTransaction = (action === 'approve' || action === 'complete') && item.transactionId;
+    if (shouldHandoffClosedTransaction) {
+      const txDocForAccounting = await adminDb.collection('transactions').doc(item.transactionId).get();
+      if (txDocForAccounting.exists && String(txDocForAccounting.data()?.status || '').toLowerCase() === 'closed') {
+        try {
+          const currentCloseout = (txDocForAccounting.data()?.accountingCloseout || {}) as Record<string, any>;
+          const alreadyInAccounting = currentCloseout.status && !['completed', 'archived'].includes(String(currentCloseout.status));
+          await handoffClosedTransactionToAccounting(adminDb, item.transactionId, {
+            uid: decoded.uid,
+            name: reviewerName,
+            email: reviewerEmail,
+          });
+          if (!alreadyInAccounting) {
+            const accountingUids = await getAccountingUids(adminDb);
+            if (accountingUids.length > 0) {
+              const txAddress = String(txDocForAccounting.data()?.propertyAddress || txDocForAccounting.data()?.address || 'a closed transaction');
+              await sendNotification(adminDb, {
+                type: 'accounting_closeout_new',
+                recipientUids: accountingUids,
+                title: 'New Accounting Closeout',
+                body: `${txAddress} is ready for Accounting review.`,
+                url: `/dashboard/admin/accounting?transactionId=${item.transactionId}`,
+                data: { transactionId: item.transactionId },
+              });
+            }
+          }
+        } catch (accountingError: any) {
+          console.error('[staff-queue PATCH] Accounting handoff failed:', accountingError?.message);
+        }
       }
     }
 
