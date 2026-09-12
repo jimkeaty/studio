@@ -15,7 +15,11 @@ import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSid
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
-import { OPERATIONAL_TRANSACTION_FORM_FIELDS } from '@/lib/transactions/operationalEditFields';
+import {
+  DIRECT_SPLIT_FIELDS,
+  mergeOperationalDirectSplit,
+  OPERATIONAL_TRANSACTION_FORM_FIELDS,
+} from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 
 function serializeFirestore(val: any): any {
@@ -497,6 +501,8 @@ export async function PATCH(req: NextRequest) {
       'agentNetCommission', 'companyRetained'];
     const hasSplitChange = SPLIT_MERGE_FIELDS.some(f => body[f] !== undefined) ||
       body.splitSnapshot !== undefined;
+    const hasDirectSplitChange = [...DIRECT_SPLIT_FIELDS]
+      .some((field) => Object.prototype.hasOwnProperty.call(body, field));
     if (hasSplitChange && !updates.splitSnapshot) {
       // Only do the merge if the form didn't already send a full splitSnapshot object
       const existingDoc2 = await adminDb.collection('transactions').doc(id).get();
@@ -568,11 +574,11 @@ export async function PATCH(req: NextRequest) {
     Object.assign(updates, cooperatingCommission.updates);
     enforcePassThroughFinancialPolicy(existingData || {}, updates);
 
-    // A leader-team member uses a three-way snapshot: member payout, leader
-    // retained spread, and brokerage/company retained. A legacy generic 70/30
-    // profile split can otherwise overwrite that snapshot during an ordinary
-    // Staff/Admin/TC edit. Respect explicit manual overrides and pass-throughs,
-    // but rebuild the canonical team snapshot for an untouched team calculation.
+    // Rebuild the canonical snapshot whenever an authorized operational save
+    // changes commission inputs. This applies to independent and team agents
+    // alike: a flat-dollar GCI must not retain an old profile-derived dollar
+    // split, and a source-aware CGL calculation must remain consistent through
+    // Admin Ledger edits. Explicit manual split overrides still take precedence.
     const effectiveTransaction = { ...existingData, ...updates };
     const isPassThrough = Boolean(
       effectiveTransaction.isPassThrough ||
@@ -581,7 +587,15 @@ export async function PATCH(req: NextRequest) {
     );
     const hasManualCommissionOverride =
       updates.commissionOverridden === true || existingData?.commissionOverridden === true;
-    if (hasSplitChange && !isPassThrough && !hasManualCommissionOverride) {
+    const COMMISSION_CALCULATION_FIELDS = new Set([
+      'agentId', 'commission', 'gci', 'commissionPercent', 'commissionBasePrice',
+      'commissionCalculationMethod', 'commissionFlatAmount', 'salePrice',
+      'dealSource', 'outboundReferralFee', 'outboundReferralFeePercent',
+      'closedDate', 'contractDate',
+    ]);
+    const hasCommissionCalculationChange = Object.keys(body)
+      .some((field) => COMMISSION_CALCULATION_FIELDS.has(field));
+    if ((hasSplitChange || hasCommissionCalculationChange) && !isPassThrough && !hasManualCommissionOverride) {
       const grossCommission = Number(
         effectiveTransaction.gci ??
         effectiveTransaction.commission ??
@@ -605,21 +619,32 @@ export async function PATCH(req: NextRequest) {
             transactionDate: effectiveTransaction.closedDate || effectiveTransaction.contractDate || null,
             transactionId: id,
           });
-          if (teamCalculation.calculationModel === 'teamMember') {
+          if (teamCalculation.splitSnapshot) {
             const teamSplit = teamCalculation.splitSnapshot as Record<string, any>;
             updates.splitSnapshot = {
               ...(updates.splitSnapshot || {}),
               ...teamSplit,
             };
-            updates.agentPct = teamSplit.memberPercentOfLeaderSide;
+            updates.creditSnapshot = teamCalculation.creditSnapshot;
+            updates.agentType = teamCalculation.agentType;
+            updates.calculationModel = teamCalculation.calculationModel;
+            updates.agentPct = teamSplit.memberPercentOfLeaderSide ?? teamSplit.agentSplitPercent;
             updates.brokerPct = teamSplit.companySplitPercent;
-            updates.agentDollar = teamSplit.memberPaid;
+            updates.agentDollar = teamSplit.memberPaid ?? teamSplit.agentNetCommission;
             updates.brokerGci = teamSplit.companyRetained;
           }
         } catch (teamCalculationError: any) {
           console.warn('[api/admin/transactions PATCH] Team snapshot refresh failed; preserving the saved snapshot:', teamCalculationError?.message);
         }
       }
+    }
+
+    // Apply an authorized direct percentage or dollar correction after automatic
+    // recalculation. This is the same persistence contract used by Staff and TC
+    // queues: the entered operational values win for this save and retain the
+    // separate agent-paid fee deduction in the displayed snapshot.
+    if (hasDirectSplitChange && !isPassThrough) {
+      mergeOperationalDirectSplit(existingData || {}, updates);
     }
 
     // Preserve one shared transaction document for co-agents. The helper updates

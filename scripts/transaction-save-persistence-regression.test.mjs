@@ -82,9 +82,10 @@ test('leader-team members use the team plan and preserve a member, leader, and b
   assert.match(commissionProfileRoute, /const matchingLeaderBand = teamIsWithLeader/);
   assert.match(commissionProfileRoute, /companyPct = teamIsWithLeader/);
   assert.match(commissionProfileRoute, /leaderStructurePercent: Number\(matchingLeaderBand\.leaderPercent \|\| 0\)/);
-  assert.match(adminRoute, /hasSplitChange && !isPassThrough && !hasManualCommissionOverride/);
-  assert.match(adminRoute, /teamCalculation\.calculationModel === 'teamMember'/);
-  assert.match(adminRoute, /updates\.agentDollar = teamSplit\.memberPaid/);
+  assert.match(adminRoute, /hasCommissionCalculationChange/);
+  assert.match(adminRoute, /\(hasSplitChange \|\| hasCommissionCalculationChange\) && !isPassThrough && !hasManualCommissionOverride/);
+  assert.match(adminRoute, /if \(teamCalculation\.splitSnapshot\)/);
+  assert.match(adminRoute, /updates\.agentDollar = teamSplit\.memberPaid \?\? teamSplit\.agentNetCommission/);
   assert.match(adminRoute, /updates\.brokerGci = teamSplit\.companyRetained/);
   assert.match(teamResolver, /const leaderRetainedAfterMember = asMoney\(leaderStructureGross - memberPaid\)/);
 });
