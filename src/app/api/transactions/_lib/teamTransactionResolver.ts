@@ -557,8 +557,10 @@ export async function resolveTransactionCalculation(
     input.transactionDate,
     input.transactionId,
   );
-  const leaderProgressionAfterTransaction = leaderYtd + grossCommission;
-  const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], leaderProgressionAfterTransaction) ||
+  // A closing earns its payout at the tier in effect immediately before that
+  // closing. The deal that crosses a threshold advances the following deal;
+  // it must not retroactively pay itself at the newly reached tier.
+  const leaderBand = getActiveLeaderBand(teamPlan!.leaderStructureBands || [], leaderYtd) ||
                      getActiveLeaderBand(teamPlan!.leaderStructureBands || [], 0);
 
   if (!leaderBand) {
@@ -616,8 +618,6 @@ export async function resolveTransactionCalculation(
     input.transactionDate,
     input.transactionId,
   );
-  const memberProgressionAfterTransaction = memberYtd + grossCommission;
-
   let resolvedMemberPlanId: string | null = memberPlanId;
   let memberBand: MemberPlanBand | null = null;
 
@@ -628,7 +628,7 @@ export async function resolveTransactionCalculation(
   ) {
     memberBand = getActiveMemberBand(
       profile.teamMemberOverrideBands || [],
-      memberProgressionAfterTransaction,
+      memberYtd,
     );
 
     if (!memberBand) {
@@ -640,7 +640,7 @@ export async function resolveTransactionCalculation(
     const memberPlan = await getMemberPlan(memberPlanId);
     memberBand = getActiveMemberBand(
       memberPlan.payoutBands || [],
-      memberProgressionAfterTransaction,
+      memberYtd,
     );
 
     if (!memberBand) {
@@ -649,7 +649,7 @@ export async function resolveTransactionCalculation(
   } else {
     memberBand = getActiveMemberBand(
       teamPlan!.memberDefaultBands || [],
-      memberProgressionAfterTransaction,
+      memberYtd,
     );
 
     if (!memberBand) {
