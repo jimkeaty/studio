@@ -370,6 +370,7 @@ export async function PATCH(
                   agentId,
                   agentDisplayName,
                   commission: newGCI,
+                  dealSource: String(merged.dealSource || '').trim() || null,
                   transactionDate: txDate,
                   transactionId: item.transactionId,
                 });

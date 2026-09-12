@@ -17,8 +17,9 @@ test('leader-team tier selection uses progression before the current close', () 
   );
   assert.match(
     resolver,
-    /getActiveMemberBand\(\s*profile\.teamMemberOverrideBands \|\| \[\],\s*memberYtd,\s*\)/,
+    /getActiveMemberBand\(\s*sourceSpecificOverrideBands,\s*memberYtd,\s*\)/,
   );
+  assert.match(resolver, /selectSourceSpecificMemberBands\(/);
   assert.doesNotMatch(resolver, /leaderProgressionAfterTransaction/);
   assert.doesNotMatch(resolver, /memberProgressionAfterTransaction/);
 });

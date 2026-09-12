@@ -610,6 +610,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 agentId: agentIdForCalc,
                 agentDisplayName: String(currentTxForUpdate.agentDisplayName || intake.agentDisplayName || '').trim(),
                 commission: newGCI,
+                dealSource: String(mergedWithMethod.dealSource || '').trim() || null,
                 transactionDate: txDate,
                 transactionId: linkedTxId,
               });

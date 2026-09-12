@@ -116,8 +116,8 @@ test('leader-team members ignore stale generic profile tiers and use their linke
   );
   assert.match(
     commissionProfileRoute,
-    /teamMemberCompMode === 'custom'[\s\S]*?teamMemberOverrideBands\.length > 0/,
-    'Only an explicit custom team-member mode may use override bands',
+    /teamMemberCompMode === 'custom'[\s\S]*?sourceSpecificOverrideBands\.length > 0/,
+    'Only an explicit custom team-member mode with a matching canonical lead source may use override bands',
   );
   assert.match(
     commissionProfileRoute,

@@ -66,6 +66,8 @@ export type ResolveTransactionInput = {
   agentId: string;
   agentDisplayName: string;
   commission: number;
+  /** Normalized transaction lead source used only for source-specific custom member bands. */
+  dealSource?: string | null;
   /** Existing transaction being recalculated; excluded from historical progression before this commission is added back once. */
   transactionId?: string | null;
   /**

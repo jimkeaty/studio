@@ -4,6 +4,8 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers, getTeamDefaultTransactionFee, LEADERLESS_TEAM_GROUPS } from '@/lib/commissions/teamTemplates';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
 import { getTierProgressionAsOf } from '@/lib/transactions/tierProgressionAsOf';
+import { normalizeDealSource } from '@/lib/normalizeDealSource';
+import { selectSourceSpecificMemberBands } from '@/lib/commissions/sourceSpecificMemberBands';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -123,6 +125,7 @@ export async function GET(
     const requestUrl = new URL(req.url);
     const transactionDate = requestUrl.searchParams.get('transactionDate');
     const transactionId = requestUrl.searchParams.get('transactionId');
+    const dealSource = normalizeDealSource(requestUrl.searchParams.get('dealSource'));
     const parsedCurrentGci = Number(requestUrl.searchParams.get('currentGci') || 0);
     const currentGci = Number.isFinite(parsedCurrentGci) && parsedCurrentGci > 0
       ? parsedCurrentGci
@@ -257,11 +260,15 @@ export async function GET(
     //                        teamMemberLeaderSplit = null (no leader panel shown)
     // For teams with a leader: companySplitPercent = companyPercent from leader band
     //                          teamMemberLeaderSplit = populated (leader panel shown)
+    const sourceSpecificOverrideBands = selectSourceSpecificMemberBands(
+      teamMemberOverrideBands,
+      dealSource,
+    );
     if (
       agentType === 'team' &&
       teamRole === 'member' &&
       teamMemberCompMode === 'custom' &&
-      teamMemberOverrideBands.length > 0 &&
+      sourceSpecificOverrideBands.length > 0 &&
       primaryTeamId
     ) {
       // Custom member bands are an explicit per-agent exception. Legacy arrays
@@ -300,7 +307,7 @@ export async function GET(
         // leader side and the member's direct payout. Using 100 - memberPct here would
         // incorrectly fold the leader's retained amount into brokerage revenue and make
         // a 70% member / 75% leader-side / 25% brokerage plan render as generic 70/30.
-        const customMemberTiers = teamMemberOverrideBands.map((b: any, i: number) => {
+        const customMemberTiers = sourceSpecificOverrideBands.map((b: any, i: number) => {
           const memberPct = Number(b.memberPercent || 0);
           const memberBandFrom = Number(b.fromCompanyDollar || 0);
           const matchingLeaderBand = teamIsWithLeader
@@ -348,7 +355,7 @@ export async function GET(
                   leaderPercent: Number(b.leaderPercent || 0),
                   companyPercent: Number(b.companyPercent || 0),
                 })),
-                memberDefaultBands: teamMemberOverrideBands.map((b: any) => ({
+                memberDefaultBands: sourceSpecificOverrideBands.map((b: any) => ({
                   fromCompanyDollar: Number(b.fromCompanyDollar || 0),
                   toCompanyDollar:
                     b.toCompanyDollar === null || b.toCompanyDollar === undefined

@@ -2026,6 +2026,7 @@ export default function AddTransactionPage() {
   // Fetch agent commission structure
   const watchedAgentId = form.watch('agentId');
   const watchedGCI = form.watch('gci');
+  const watchedDealSource = form.watch('dealSource');
   const watchedClosedDate = form.watch('closedDate');
   const commissionPreviewDate = watchedClosedDate || watchedContractDate || '';
   // Broker defaults apply only to new files. Existing files retain their saved fee
@@ -2072,6 +2073,7 @@ export default function AddTransactionPage() {
         const previewParams = new URLSearchParams();
         if (editTxId) previewParams.set('transactionId', editTxId);
         if (commissionPreviewDate) previewParams.set('transactionDate', commissionPreviewDate);
+        if (watchedDealSource) previewParams.set('dealSource', normalizeDealSource(watchedDealSource) || watchedDealSource);
         const currentGci = Number(watchedGCI) || 0;
         if (currentGci > 0) previewParams.set('currentGci', String(currentGci));
         const previewQuery = previewParams.toString();
@@ -2098,7 +2100,7 @@ export default function AddTransactionPage() {
     };
     fetchCommission();
     return () => { cancelled = true; };
-  }, [user, isAdmin, watchedAgentId, editMode, brokerFeeDefaultsLoaded, editTxId, commissionPreviewDate, watchedGCI]);
+  }, [user, isAdmin, watchedAgentId, editMode, brokerFeeDefaultsLoaded, editTxId, commissionPreviewDate, watchedGCI, watchedDealSource]);
 
   // Auto-calculate commission split
   const watchedIsPassThrough = form.watch('isPassThrough');
@@ -7754,7 +7756,17 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="30"
-                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; setSavedTeamSnapshotPreview(null); field.onChange(e); }}
+                          onChange={(e) => {
+                            profileRecalculationRequested.current = false;
+                            commissionManualOverride.current = true;
+                            manualPercentageSplitEdited.current = true;
+                            setSavedTeamSnapshotPreview(null);
+                            field.onChange(e);
+                            const brokerPct = Number(e.target.value);
+                            if (e.target.value !== '' && Number.isFinite(brokerPct) && brokerPct >= 0 && brokerPct <= 100) {
+                              form.setValue('agentPct', Number((100 - brokerPct).toFixed(4)) as any, { shouldDirty: true, shouldValidate: true });
+                            }
+                          }}
                         />
                       </FormControl>
                     </FormItem>
@@ -7778,7 +7790,17 @@ export default function AddTransactionPage() {
                         <PercentInput
                           value={field.value as any}
                           placeholder="70"
-                          onChange={(e) => { profileRecalculationRequested.current = false; commissionManualOverride.current = true; manualPercentageSplitEdited.current = true; setSavedTeamSnapshotPreview(null); field.onChange(e); }}
+                          onChange={(e) => {
+                            profileRecalculationRequested.current = false;
+                            commissionManualOverride.current = true;
+                            manualPercentageSplitEdited.current = true;
+                            setSavedTeamSnapshotPreview(null);
+                            field.onChange(e);
+                            const agentPct = Number(e.target.value);
+                            if (e.target.value !== '' && Number.isFinite(agentPct) && agentPct >= 0 && agentPct <= 100) {
+                              form.setValue('brokerPct', Number((100 - agentPct).toFixed(4)) as any, { shouldDirty: true, shouldValidate: true });
+                            }
+                          }}
                         />
                       </FormControl>
                     </FormItem>

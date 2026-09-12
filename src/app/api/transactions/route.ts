@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
           agentId,
           agentDisplayName,
           commission,
+          dealSource: normalizeDealSource(body.dealSource),
           transactionDate: closedDate || contractDate,
         })
         splitSnapshot = calculation.splitSnapshot
@@ -173,6 +174,7 @@ export async function POST(req: NextRequest) {
             agentId,
             agentDisplayName,
             commission: primaryShare,
+            dealSource: normalizeDealSource(body.dealSource),
             transactionDate: closedDate || contractDate,
             referralFeePercent: null,
           })
@@ -193,6 +195,7 @@ export async function POST(req: NextRequest) {
             agentId: coAgentId,
             agentDisplayName: coAgentDisplayName,
             commission: coShare,
+            dealSource: normalizeDealSource(body.dealSource),
             transactionDate: closedDate || contractDate,
             referralFeePercent: null,
           })

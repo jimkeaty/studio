@@ -1,6 +1,7 @@
 import { adminDb } from '@/lib/firebase/admin';
 import { nameSimilarity } from '@/lib/agents/fuzzyMatch';
 import { getAnniversaryCycle } from '@/lib/agents/anniversaryCycle';
+import { selectSourceSpecificMemberBands } from '@/lib/commissions/sourceSpecificMemberBands';
 import { getTierProgressionAsOf } from '@/lib/transactions/tierProgressionAsOf';
 import type {
   AgentProfile,
@@ -468,15 +469,18 @@ export async function resolveTransactionCalculation(
     );
 
     // Priority 1: custom override bands on the agent profile
+    const sourceSpecificOverrideBands = selectSourceSpecificMemberBands(
+      profile.teamMemberOverrideBands as MemberPlanBand[] | undefined,
+      input.dealSource,
+    );
     if (
       profile.teamMemberCompMode === 'custom' &&
-      Array.isArray(profile.teamMemberOverrideBands) &&
-      profile.teamMemberOverrideBands.length > 0
+      sourceSpecificOverrideBands.length > 0
     ) {
       const memberBand = getActiveMemberBand(
-        profile.teamMemberOverrideBands as MemberPlanBand[],
+        sourceSpecificOverrideBands,
         leaderlessYtd
-      ) || getActiveMemberBand(profile.teamMemberOverrideBands as MemberPlanBand[], 0);
+      ) || getActiveMemberBand(sourceSpecificOverrideBands, 0);
       if (!memberBand) {
         throw new Error(
           `No active custom member tier found for leaderless team member ${profile.agentId}`
@@ -621,13 +625,16 @@ export async function resolveTransactionCalculation(
   let resolvedMemberPlanId: string | null = memberPlanId;
   let memberBand: MemberPlanBand | null = null;
 
+  const sourceSpecificOverrideBands = selectSourceSpecificMemberBands(
+    profile.teamMemberOverrideBands as MemberPlanBand[] | undefined,
+    input.dealSource,
+  );
   if (
     profile.teamMemberCompMode === 'custom' &&
-    Array.isArray(profile.teamMemberOverrideBands) &&
-    profile.teamMemberOverrideBands.length > 0
+    sourceSpecificOverrideBands.length > 0
   ) {
     memberBand = getActiveMemberBand(
-      profile.teamMemberOverrideBands || [],
+      sourceSpecificOverrideBands,
       memberYtd,
     );
 
