@@ -238,14 +238,7 @@ export default function DailyTrackerPage() {
         body: JSON.stringify({ date: selectedDate, dailyActivity: activity, ...(isImpersonating && effectiveUid ? { viewAs: effectiveUid } : {}) }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        if (res.status === 403 && json.code === 'edit_window_expired') {
-          toast({ variant: 'destructive', title: 'Edit Locked', description: 'Edits are locked after 45 days.' });
-        } else {
-          throw new Error(json?.error || `Save failed (${res.status})`);
-        }
-        return;
-      }
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `Save failed (${res.status})`);
       setHasUnsavedChanges(false);
       toast({ title: 'Saved! ✓', description: `Activity for ${selectedDate} has been logged.` });
       // Refresh range
@@ -792,7 +785,7 @@ export default function DailyTrackerPage() {
                     {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     {saving ? 'Saving…' : hasUnsavedChanges ? 'Save Changes' : 'Save Day'}
                   </Button>
-                  <p className="text-[10px] text-muted-foreground text-center">Edits locked after 45 days</p>
+                  <p className="text-[10px] text-muted-foreground text-center">You can add or correct tracking for any date.</p>
                 </CardContent>
               </Card>
             </div>

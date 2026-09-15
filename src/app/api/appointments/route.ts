@@ -4,9 +4,7 @@ import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 import { FieldValue, Query } from 'firebase-admin/firestore';
-import { differenceInDays, startOfMonth, endOfMonth, format } from 'date-fns';
-
-const EDIT_WINDOW_DAYS = 45;
+import { startOfMonth, endOfMonth, format } from 'date-fns';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -41,17 +39,6 @@ async function requireUser(req: NextRequest) {
   } catch (err: any) {
     throw { status: 401, message: 'Invalid or expired token', code: 'auth/invalid-token' };
   }
-}
-
-function isDateEditable(dateStr: string, role: string): boolean {
-    if (role === 'admin') return true;
-    const date = new Date(dateStr + "T00:00:00");
-    const today = new Date();
-    const diff = differenceInDays(
-        new Date(today.getFullYear(), today.getMonth(), today.getDate()),
-        new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    );
-    return diff <= EDIT_WINDOW_DAYS;
 }
 
 // --- Route Handlers ---
@@ -164,7 +151,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const { uid: callerUid, role } = await requireUser(req);
+    const { uid: callerUid } = await requireUser(req);
 
     let body: any;
     try {
@@ -176,14 +163,8 @@ export async function POST(req: NextRequest) {
     // Admin can create appointment for any agent via body.viewAs
     const viewAs = body?.viewAs;
     const uid = (await isAdminLike(callerUid) && viewAs) ? viewAs : callerUid;
-    const effectiveRole = await isAdminLike(callerUid) ? 'admin' : role;
-
     if (!body.date || !body.contactName || !body.category) {
       return jsonError(400, 'Missing required fields: date, contactName, category');
-    }
-
-    if (!isDateEditable(body.date, effectiveRole)) {
-        return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
     }
 
     // ── 'both' category: create 2 separate appointments (buyer + seller) ──────

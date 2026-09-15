@@ -4,9 +4,6 @@ import { adminDb, adminAuth, admin } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 
 import { FieldValue } from 'firebase-admin/firestore';
-import { differenceInDays } from 'date-fns';
-
-const EDIT_WINDOW_DAYS = 45;
 
 function jsonError(status: number, error: string, code?: string) {
   return NextResponse.json({ ok: false, error, code: code ?? `http_${status}` }, { status });
@@ -26,17 +23,6 @@ async function requireUser(req: NextRequest) {
   } catch (err: any) {
     throw { status: 401, message: 'Invalid or expired token', code: 'auth/invalid-token' };
   }
-}
-
-function isDateEditable(dateStr: string, role: string): boolean {
-    if (role === 'admin') return true;
-    const date = new Date(dateStr + "T00:00:00");
-    const today = new Date();
-    const diff = differenceInDays(
-        new Date(today.getFullYear(), today.getMonth(), today.getDate()),
-        new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    );
-    return diff <= EDIT_WINDOW_DAYS;
 }
 
 /**
@@ -77,12 +63,11 @@ async function buildAgentIdSet(uid: string): Promise<Set<string>> {
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { uid: callerUid, role } = await requireUser(req);
+    const { uid: callerUid } = await requireUser(req);
     const { id } = await params;
     const body = await req.json();
 
     const callerIsAdmin = await isAdminLike(callerUid);
-    const effectiveRole = callerIsAdmin ? 'admin' : role;
 
     // Admin can patch on behalf of any agent via body.viewAs
     const viewAs = body?.viewAs;
@@ -109,15 +94,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!agentIdSet.has(data.agentId)) {
         return jsonError(403, 'You do not have permission to edit this appointment');
       }
-    }
-
-    // Check edit window on the original date
-    if (!isDateEditable(data.date, effectiveRole)) {
-        return jsonError(403, 'Edits are locked after 45 days.', 'edit_window_expired');
-    }
-    // Also check if the date is being changed to a locked date
-    if (body.date && !isDateEditable(body.date, effectiveRole)) {
-        return jsonError(403, 'Cannot move appointment to a date that is locked for edits.', 'edit_window_expired');
     }
 
     // Strip community-board-only fields before writing to appointment doc
@@ -213,11 +189,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { uid: callerUid, role } = await requireUser(req);
+    const { uid: callerUid } = await requireUser(req);
     const { id } = await params;
 
     const isAdmin = await isAdminLike(callerUid);
-    const effectiveRole = isAdmin ? 'admin' : role;
 
     // Admin can delete on behalf of any agent via ?viewAs= query param
     const viewAs = new URL(req.url).searchParams.get('viewAs');
@@ -246,10 +221,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       if (!agentIdSet.has(data.agentId)) {
         return jsonError(403, 'You do not have permission to delete this appointment');
       }
-    }
-
-    if (!isDateEditable(data.date, effectiveRole)) {
-        return jsonError(403, 'Deletions are locked after 45 days.', 'edit_window_expired');
     }
 
     await docRef.delete();
