@@ -20,6 +20,10 @@ The targeted source regression passed 3/3 checks for historical create, correcti
 
 The repository typecheck retains its established generated Next/historic baseline. There were no diagnostics involving the changed appointment routes, Daily Tracker page, or the new tracking-lock regression.
 
+## Production Verification
+
+The repository-triggered App Hosting rollout completed successfully and the public build marker reported **`f5188f9-master`**. The live Daily Tracker rendered the new instruction, **“You can add or correct tracking for any date,”** and no longer displayed a 45-day lock message. No production tracking record was created, edited, moved, or deleted during this verification.
+
 ## Rollback
 
 This is a policy and validation change only; it does not modify or delete historical tracking records. If the date-window policy must be restored, revert this checkpoint’s code commit. No data rewrite is needed.
