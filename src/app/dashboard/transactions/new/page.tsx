@@ -2678,6 +2678,23 @@ export default function AddTransactionPage() {
             agentDollar: Number(resolvedAgentDollar) > 0 ? resolvedAgentDollar : resolvedGci,
           });
         }
+
+        // Third and fourth parties are optional form sections, so they need an
+        // explicit visibility restore after Firestore hydration. Without this,
+        // their canonical values were present in `fieldMap` but remained hidden
+        // behind the “Add 3rd/4th” controls after any Agent, Staff, TC, Admin, or
+        // Accounting user reopened the transaction.
+        const hasPartyContact = (...partyValues: unknown[]) => partyValues.some((value) =>
+          String(value ?? '').trim().length > 0,
+        );
+        const hasBuyer3 = hasPartyContact(tx.buyer3Name, tx.buyer3Email, tx.buyer3Phone);
+        const hasBuyer4 = hasPartyContact(tx.buyer4Name, tx.buyer4Email, tx.buyer4Phone);
+        const hasSeller3 = hasPartyContact(tx.seller3Name, tx.seller3Email, tx.seller3Phone);
+        const hasSeller4 = hasPartyContact(tx.seller4Name, tx.seller4Email, tx.seller4Phone);
+        setShowBuyer3(hasBuyer3 || hasBuyer4);
+        setShowBuyer4(hasBuyer4);
+        setShowSeller3(hasSeller3 || hasSeller4);
+        setShowSeller4(hasSeller4);
         setPersistedEditStatus(String(fieldMap.status || '').toLowerCase() || null);
         // Global sanitization: for any string field that has an array value in Firestore
         // (legacy data from old form versions), coerce it to the first element or empty string.
@@ -3092,8 +3109,12 @@ export default function AddTransactionPage() {
         { name: values.client2Name, email: values.client2Email, phone: values.client2Phone },
         { name: values.buyerName, email: values.buyerEmail, phone: values.buyerPhone },
         { name: values.buyer2Name, email: values.buyer2Email, phone: values.buyer2Phone },
+        { name: values.buyer3Name, email: values.buyer3Email, phone: values.buyer3Phone },
+        { name: values.buyer4Name, email: values.buyer4Email, phone: values.buyer4Phone },
         { name: values.sellerName, email: values.sellerEmail, phone: values.sellerPhone },
         { name: values.seller2Name, email: values.seller2Email, phone: values.seller2Phone },
+        { name: values.seller3Name, email: values.seller3Email, phone: values.seller3Phone },
+        { name: values.seller4Name, email: values.seller4Email, phone: values.seller4Phone },
       ];
       for (const contact of clientFields) {
         if (contact.name || contact.email || contact.phone) contactSaves.push(saveContact('client', contact));

@@ -315,6 +315,12 @@ export async function POST(req: NextRequest) {
       ...(body.buyer2Name ? { buyer2Name: body.buyer2Name } : {}),
       ...(body.buyer2Email ? { buyer2Email: body.buyer2Email } : {}),
       ...(body.buyer2Phone ? { buyer2Phone: body.buyer2Phone } : {}),
+      ...(body.buyer3Name ? { buyer3Name: body.buyer3Name } : {}),
+      ...(body.buyer3Email ? { buyer3Email: body.buyer3Email } : {}),
+      ...(body.buyer3Phone ? { buyer3Phone: body.buyer3Phone } : {}),
+      ...(body.buyer4Name ? { buyer4Name: body.buyer4Name } : {}),
+      ...(body.buyer4Email ? { buyer4Email: body.buyer4Email } : {}),
+      ...(body.buyer4Phone ? { buyer4Phone: body.buyer4Phone } : {}),
       // Seller info
       ...(body.sellerName ? { sellerName: body.sellerName } : {}),
       ...(body.sellerEmail ? { sellerEmail: body.sellerEmail } : {}),
@@ -322,6 +328,12 @@ export async function POST(req: NextRequest) {
       ...(body.seller2Name ? { seller2Name: body.seller2Name } : {}),
       ...(body.seller2Email ? { seller2Email: body.seller2Email } : {}),
       ...(body.seller2Phone ? { seller2Phone: body.seller2Phone } : {}),
+      ...(body.seller3Name ? { seller3Name: body.seller3Name } : {}),
+      ...(body.seller3Email ? { seller3Email: body.seller3Email } : {}),
+      ...(body.seller3Phone ? { seller3Phone: body.seller3Phone } : {}),
+      ...(body.seller4Name ? { seller4Name: body.seller4Name } : {}),
+      ...(body.seller4Email ? { seller4Email: body.seller4Email } : {}),
+      ...(body.seller4Phone ? { seller4Phone: body.seller4Phone } : {}),
       // Lender office
       ...(body.lenderOffice ? { lenderOffice: body.lenderOffice } : {}),
       // Title extras
