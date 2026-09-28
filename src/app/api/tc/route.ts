@@ -461,7 +461,9 @@ export async function POST(req: NextRequest) {
     const txRef = adminDb.collection('transactions').doc();
     let tcIntakeRef: FirebaseFirestore.DocumentReference | null = null;
     if (workingWithTc) {
-      tcIntakeRef = adminDb.collection('tcIntakes').doc();
+      // One TC workflow wrapper is permanently keyed to its canonical
+      // transaction. Future agent edits update/reopen this same queue record.
+      tcIntakeRef = adminDb.collection('tcIntakes').doc(txRef.id);
     }
 
     // Atomic batch write
@@ -506,6 +508,10 @@ export async function POST(req: NextRequest) {
         listingDate: toStr(body.listingDate) || null,
         projectedCloseDate: toStr(body.projectedCloseDate) || null,
         submittedAt: now,
+        queueUpdatedAt: now,
+        lastChangedAt: now,
+        lastChangedBy: uid,
+        lastChangedByRole: 'agent',
         updatedAt: now,
       });
     }

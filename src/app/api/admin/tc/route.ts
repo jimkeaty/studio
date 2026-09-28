@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
+import { reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -37,6 +38,53 @@ function toNum(v: any): number | null {
 function toStr(v: any): string | null {
   const s = String(v ?? '').trim();
   return s || null;
+}
+
+function workflowPriority(status: unknown): number {
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'submitted': return 4;
+    case 'in_review': return 3;
+    case 'approved': return 2;
+    case 'rejected': return 1;
+    default: return 0;
+  }
+}
+
+function queueActivityTime(intake: Record<string, any>): number {
+  const value = intake.queueUpdatedAt || intake.lastChangedAt || intake.updatedAt || intake.submittedAt;
+  if (value && typeof value.toDate === 'function') return value.toDate().getTime();
+  if (value instanceof Date) return value.getTime();
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * Historic paths could create more than one TC wrapper for the same canonical
+ * transaction. The queue is an index, not a second transaction store, so return
+ * one durable row per transaction without mutating or deleting historic data.
+ */
+function dedupeTcQueueIntakes(intakes: Array<Record<string, any>>) {
+  const byTransaction = new Map<string, Record<string, any>>();
+  for (const intake of intakes) {
+    const transactionId = String(
+      intake.transactionId || intake.approvedTransactionId || intake.originalTransactionId || intake.id,
+    ).trim();
+    const existing = byTransaction.get(transactionId);
+    if (!existing) {
+      byTransaction.set(transactionId, intake);
+      continue;
+    }
+
+    const intakeUsesDeterministicId = String(intake.id) === transactionId;
+    const existingUsesDeterministicId = String(existing.id) === transactionId;
+    const statusDifference = workflowPriority(intake.status) - workflowPriority(existing.status);
+    const shouldReplace =
+      statusDifference > 0 ||
+      (statusDifference === 0 && intakeUsesDeterministicId && !existingUsesDeterministicId) ||
+      (statusDifference === 0 && intakeUsesDeterministicId === existingUsesDeterministicId && queueActivityTime(intake) > queueActivityTime(existing));
+    if (shouldReplace) byTransaction.set(transactionId, intake);
+  }
+  return Array.from(byTransaction.values());
 }
 
 const VALID_CLOSING_TYPES = new Set(['buyer', 'listing', 'referral', 'dual']);
@@ -81,7 +129,7 @@ export async function GET(req: NextRequest) {
     const demoSnap = await adminDb.collection('agentProfiles').where('isDemoAccount', '==', true).get();
     const demoAgentIds = new Set(demoSnap.docs.map(d => String(d.data().agentId || d.id)));
 
-    let intakes = snap.docs
+    const rawIntakes = snap.docs
       .filter(d => {
         if (demoAgentIds.size === 0) return true;
         const agentId = String(d.data().agentId || '');
@@ -91,12 +139,12 @@ export async function GET(req: NextRequest) {
         id: d.id,
         ...serializeFirestore(d.data()),
       }));
+    const intakes = dedupeTcQueueIntakes(rawIntakes);
 
-    // Sort client-side to avoid composite index requirements
+    // Recently changed/reopened records lead the queue. Fall back to the
+    // original submission time for historic items that predate queue activity.
     intakes.sort((a, b) => {
-      const aTime = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
-      const bTime = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
-      return bTime - aTime;
+      return queueActivityTime(b) - queueActivityTime(a);
     });
 
     return NextResponse.json({ ok: true, intakes });
@@ -273,6 +321,30 @@ export async function POST(req: NextRequest) {
       submittedAt: now,
       updatedAt: now,
     };
+
+    // A direct administrative submission tied to an existing transaction must
+    // refresh the same TC workflow item instead of adding another queue row.
+    const canonicalTransactionId = toStr(body.transactionId);
+    if (canonicalTransactionId) {
+      // An omitted assignment means "retain the current TC," not "unassign." A
+      // caller may explicitly pass null when a deliberate unassignment is needed.
+      const linkedIntakeData = { ...intakeData };
+      if (body.assignedTcProfileId === undefined) delete linkedIntakeData.assignedTcProfileId;
+      const queueUpdate = await reopenTcIntakeForTransaction(adminDb, {
+        transactionId: canonicalTransactionId,
+        preferredIntakeId: toStr(body.tcIntakeId),
+        intake: linkedIntakeData,
+        actorUid: decoded.uid,
+        actorRole: 'staff',
+        now,
+      });
+      return NextResponse.json({
+        ok: true,
+        intakeId: queueUpdate.id,
+        transactionId: canonicalTransactionId,
+        reopened: queueUpdate.reopened,
+      }, { status: queueUpdate.created ? 201 : 200 });
+    }
 
     const docRef = await adminDb.collection('tcIntakes').add(intakeData);
 

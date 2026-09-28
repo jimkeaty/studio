@@ -10,7 +10,7 @@ import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifica
 import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
-import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
+import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
@@ -522,47 +522,6 @@ export async function PATCH(
       throw error;
     }
 
-    // ── TC Queue sync: if this transaction has a linked tcIntakes record, mirror key field
-    //    changes back so the TC queue always shows current data without requiring a re-approval.
-    //    Only sync non-workflow fields (never overwrite TC queue status, checklist, etc.).
-    void (async () => {
-      try {
-        const linkedIntakeSnap = await adminDb
-          .collection('tcIntakes')
-          .where('approvedTransactionId', '==', txId)
-          .limit(1)
-          .get();
-        if (!linkedIntakeSnap.empty) {
-          const TC_SYNC_FIELDS = new Set([
-            'address', 'propertyAddress', 'listPrice', 'salePrice', 'commissionPercent',
-            'gci', 'transactionFee', 'earnestMoney', 'closingType', 'dealType',
-            'listingDate', 'contractDate', 'closingDate', 'closedDate', 'optionExpiration',
-            'inspectionDeadline', 'projectedCloseDate',
-            'sellerName', 'sellerEmail', 'sellerPhone',
-            'seller2Name', 'seller2Email', 'seller2Phone',
-            'buyerName', 'buyerEmail', 'buyerPhone',
-            'buyer2Name', 'buyer2Email', 'buyer2Phone',
-            'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
-            'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
-            'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
-            'inspectionTypes', 'inspectorName', 'targetInspectionDate', 'tcScheduleInspections',
-            'mediaTypes', 'mediaRequestedDate', 'mediaOrderNotes',
-            'notes', 'additionalComments', 'documents',
-            'status',
-          ]);
-          const intakeSyncUpdates: Record<string, any> = { updatedAt: new Date().toISOString() };
-          for (const [k, v] of Object.entries(updates)) {
-            if (TC_SYNC_FIELDS.has(k)) intakeSyncUpdates[k] = v;
-          }
-          if (Object.keys(intakeSyncUpdates).length > 1) {
-            await linkedIntakeSnap.docs[0].ref.update(intakeSyncUpdates);
-          }
-        }
-      } catch (syncErr) {
-        console.error('[agent PATCH] tcIntakes sync error (non-fatal):', syncErr);
-      }
-    })();
-
     // ── Staff Queue: notify staff based on transaction type and status change ──
     // Rules:
     //   - Listing/dual transactions: notify on any MLS status change
@@ -620,49 +579,28 @@ export async function PATCH(
     if (effectiveWorkingWithTc && !isTcYes(txData.workingWithTc)) {
       updates.workingWithTc = true;
     }
-    // Auto-resubmit to TC queue when:
-    //   1. Agent explicitly sends resubmitToTc=true, OR
-    //   2. Status is changing to 'pending' (or 'under_contract') AND workingWithTc=true
-    //      (this handles the case where the agent changes status from the detail page
-    //       without explicitly clicking a "resubmit" button)
-    const isPendingStatus = ['pending', 'under_contract'].includes(String(newStatus || txData.status || '').toLowerCase());
-    const isStatusChangeToPending = !!(newStatus && ['pending', 'under_contract'].includes(newStatus) && newStatus !== previousStatus);
-
-    // A transaction can retain a stale tcIntakeId after an older intake was
-    // archived or deleted. Do not trust the stored ID alone: inspect linked
-    // intakes and recreate a working queue record whenever a TC-managed file
-    // is Pending without an active submitted/in-review intake.
-    let hasWorkingTcIntake = false;
-    if (effectiveWorkingWithTc && isPendingStatus) {
-      try {
-        const linkedIntakes = await adminDb
-          .collection('tcIntakes')
-          .where('approvedTransactionId', '==', txId)
-          .get();
-        hasWorkingTcIntake = linkedIntakes.docs.some((doc) => {
-          const intakeStatus = String(doc.data().status || '').toLowerCase();
-          return intakeStatus === 'submitted' || intakeStatus === 'in_review';
-        });
-      } catch (intakeLookupErr: any) {
-        console.warn('[agent PATCH] TC intake recovery lookup failed:', intakeLookupErr?.message);
-      }
+    // A TC workflow is a single durable queue wrapper for one canonical
+    // transaction. Any agent save on a TC-managed file refreshes that one item,
+    // moves it to the top, and reopens it when a previous TC approval exists.
+    // This replaces the older "add a resubmission row" behavior that caused
+    // multiple TC Queue lines for the same address.
+    let hasLinkedTcIntake = false;
+    try {
+      const linkedIntakes = await findTcIntakesForTransaction(adminDb, txId, txData.tcIntakeId);
+      hasLinkedTcIntake = linkedIntakes.length > 0;
+    } catch (intakeLookupErr: any) {
+      console.warn('[agent PATCH] TC intake lookup failed:', intakeLookupErr?.message);
     }
+    const shouldRefreshTcQueue = effectiveWorkingWithTc || hasLinkedTcIntake || !!resubmitToTc;
+    let tcQueueUpdate: { id: string; created: boolean; reopened: boolean; duplicateCount: number } | null = null;
 
-    const shouldResubmitToTc = effectiveWorkingWithTc && (
-      !!resubmitToTc ||
-      isStatusChangeToPending ||
-      (isPendingStatus && !hasWorkingTcIntake)
-    );
-    if (shouldResubmitToTc) {
+    if (shouldRefreshTcQueue) {
       const mergedData = { ...txData, ...updates };
       const intake: Record<string, any> = {
-        // Workflow status (TC queue status, not listing status)
-        status: 'submitted',
-        listingStatus: 'pending',
-        submittedAt: new Date().toISOString(),
+        // The helper owns queue workflow state. These values are the current
+        // canonical transaction fields displayed in the queue row.
+        listingStatus: mergedData.status ?? null,
         submittedBy: uid,
-        isResubmission: true,
-        originalTransactionId: txId,
 
         // Agent info
         agentId: mergedData.agentId,
@@ -755,25 +693,21 @@ export async function PATCH(
         documents: Array.isArray(mergedData.documents) ? mergedData.documents : [],
       };
 
-      // IMPORTANT: set approvedTransactionId so that if a TC coordinator approves
-      // this resubmission, the TC approval route UPDATES the existing transaction
-      // instead of creating a brand-new duplicate transaction.
-      intake.approvedTransactionId = txId;
-      // TC detail navigation accepts either key; storing both makes new recovery
-      // records and older manual intakes behave consistently.
-      intake.transactionId = txId;
+      tcQueueUpdate = await reopenTcIntakeForTransaction(adminDb, {
+        transactionId: txId,
+        preferredIntakeId: txData.tcIntakeId,
+        intake,
+        actorUid: uid,
+        actorRole: 'agent',
+      });
 
-      // One deterministic intake per transaction makes concurrent agent/admin
-      // saves idempotent. The checklist is created in the same atomic batch.
-      const createdIntake = await createTcIntakeWithChecklist(adminDb, txId, intake);
-
-      // Persist the current valid queue link so future TC detail navigation
-      // never points at an archived or missing legacy intake.
+      // Persist the selected durable wrapper so later saves and notifications
+      // address the same TC queue item.
       await txRef.update({
-        tcIntakeId: createdIntake.id,
-        // Persist the canonical flag even when this edit started from an older
-        // record that carried only the legacy tcWorking: 'yes' selector value.
-        workingWithTc: true,
+        tcIntakeId: tcQueueUpdate.id,
+        // Preserve the explicit agent choice unless the transaction was already
+        // TC-managed through its historical linked queue record.
+        ...(effectiveWorkingWithTc ? { workingWithTc: true } : {}),
         updatedAt: new Date().toISOString(),
       });
     }
@@ -992,17 +926,19 @@ export async function PATCH(
           });
         }
 
-        // ── TC resubmission notification ─────────────────────────────────────
-        if (shouldResubmitToTc) {
+        // A new or previously approved/rejected TC item merits a queue alert.
+        // Routine edits still retain the existing meaningful-change and document
+        // alerts below, without generating a second "new intake" notification.
+        if (tcQueueUpdate?.created || tcQueueUpdate?.reopened) {
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
             await sendNotification(adminDb, {
               type: 'tc_new_intake',
               recipientUids: tcUids,
-              title: 'Transaction Resubmitted to TC',
-              body: `${agentName} resubmitted ${txAddress} for TC review (status: pending).`,
-              url: '/dashboard/admin/tc',
-              data: { transactionId: txId },
+              title: tcQueueUpdate.reopened ? 'Transaction Reopened for TC Review' : 'New TC Intake Submitted',
+              body: `${agentName} updated ${txAddress}; the existing TC queue item is ready for review.`,
+              url: `/dashboard/admin/tc/${tcQueueUpdate.id}`,
+              data: { transactionId: txId, tcIntakeId: tcQueueUpdate.id },
             });
           }
         }
@@ -1209,7 +1145,7 @@ export async function PATCH(
           }
 
           // Also notify TC if working with TC
-          if (effectiveWorkingWithTc) {
+          if (shouldRefreshTcQueue) {
             const tcUids = await getTcUids(adminDb);
             if (tcUids.length > 0) {
               await sendNotification(adminDb, {
@@ -1228,7 +1164,13 @@ export async function PATCH(
       }
     })();
 
-    return NextResponse.json({ ok: true, updated: Object.keys(updates), resubmitted: shouldResubmitToTc });
+    return NextResponse.json({
+      ok: true,
+      updated: Object.keys(updates),
+      resubmitted: Boolean(tcQueueUpdate?.created || tcQueueUpdate?.reopened),
+      tcQueueRefreshed: Boolean(tcQueueUpdate),
+      tcIntakeId: tcQueueUpdate?.id ?? txData.tcIntakeId ?? null,
+    });
   } catch (err: any) {
     console.error('[api/agent/transactions/[txId]]', err);
     return jsonError(500, err.message || 'Internal Server Error');

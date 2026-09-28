@@ -8,7 +8,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { normalizeDealSource } from '@/lib/normalizeDealSource';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
-import { createTcIntakeWithChecklist, ensureTcChecklist } from '@/lib/transactions/tcChecklist';
+import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
@@ -729,62 +729,27 @@ export async function PATCH(req: NextRequest) {
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
     const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
 
-    // ── TC Queue recovery ──────────────────────────────────────────────────
-    // All operational editors (admin, staff, TC, and an admin impersonating an
-    // agent) save through this route. A TC-managed Pending file must therefore
-    // have an active intake even when the save did not travel through the agent
-    // PATCH route. Keep the queue as a workflow index that points back to this
-    // same canonical transaction document; never create a second transaction.
+    // ── TC Queue refresh ───────────────────────────────────────────────────
+    // Operational edits use the same one-row-per-transaction workflow rule as
+    // agent edits. If a file was approved previously, an authorized correction
+    // reopens its existing TC item and moves it to the top without discarding
+    // assignment or checklist progress.
     try {
       const txForTcQueue = updatedSnap.data() as any;
       const isTcYes = (value: unknown) => value === true || String(value ?? '').trim().toLowerCase() === 'yes';
-      const isTcManaged = isTcYes(txForTcQueue?.workingWithTc) || isTcYes(txForTcQueue?.tcWorking);
-      const isPendingForTc = ['pending', 'under_contract'].includes(
-        String(txForTcQueue?.status || '').trim().toLowerCase(),
-      );
+      const linkedIntakes = await findTcIntakesForTransaction(adminDb, id, txForTcQueue?.tcIntakeId);
+      const isTcManaged = isTcYes(txForTcQueue?.workingWithTc) || isTcYes(txForTcQueue?.tcWorking) || linkedIntakes.length > 0;
 
-      if (isTcManaged && isPendingForTc) {
-        const linkedIntakes = await adminDb
-          .collection('tcIntakes')
-          .where('approvedTransactionId', '==', id)
-          .get();
-        const activeIntake = linkedIntakes.docs.find((doc) => {
-          const intakeStatus = String(doc.data().status || '').trim().toLowerCase();
-          return intakeStatus === 'submitted' || intakeStatus === 'in_review';
-        });
-
-        if (activeIntake) {
-          // Heal a stale/missing pointer without changing the TC's workflow state.
-          // Older recovery records may not have received their checklist when a
-          // previous best-effort write failed. Repair that workflow-only state.
-          await ensureTcChecklist(adminDb, activeIntake.id);
-          if (txForTcQueue?.tcIntakeId !== activeIntake.id || txForTcQueue?.workingWithTc !== true) {
-            await adminDb.collection('transactions').doc(id).update({
-              tcIntakeId: activeIntake.id,
-              workingWithTc: true,
-              updatedAt: new Date(),
-            });
-          }
-        } else {
-          const nowIso = new Date().toISOString();
-          // Create the intake and checklist in one batch using the transaction ID
-          // as the deterministic intake ID. Parallel saves cannot produce two
-          // submitted records for the same transaction.
-          const intakeRef = await createTcIntakeWithChecklist(adminDb, id, {
-            // Workflow state. The transaction's status remains authoritative for
-            // the deal; this status only controls the TC work queue.
-            status: 'submitted',
-            listingStatus: 'pending',
-            submittedAt: nowIso,
-            updatedAt: nowIso,
-            submittedBy: decoded.uid,
-            submittedByUid: decoded.uid,
-            isResubmission: true,
-            originalTransactionId: id,
-            transactionId: id,
-            approvedTransactionId: id,
-
-            // Queue-list fields. Detail editing reopens the transaction above.
+      if (isTcManaged) {
+        const queueUpdate = await reopenTcIntakeForTransaction(adminDb, {
+          transactionId: id,
+          preferredIntakeId: txForTcQueue?.tcIntakeId,
+          actorUid: decoded.uid,
+          actorRole: (await getStaffRole(decoded.uid)) || 'staff',
+          intake: {
+            submittedBy: txForTcQueue?.submittedByUid || decoded.uid,
+            submittedByUid: txForTcQueue?.submittedByUid || decoded.uid,
+            listingStatus: txForTcQueue?.status || null,
             agentId: txForTcQueue?.agentId || null,
             agentDisplayName: txForTcQueue?.agentDisplayName || '',
             address: txForTcQueue?.address || txForTcQueue?.propertyAddress || null,
@@ -800,11 +765,12 @@ export async function PATCH(req: NextRequest) {
             contractDate: txForTcQueue?.contractDate ?? null,
             closingDate: txForTcQueue?.closingDate ?? txForTcQueue?.closedDate ?? null,
             documents: Array.isArray(txForTcQueue?.documents) ? txForTcQueue.documents : [],
-          });
+          },
+        });
 
+        if (txForTcQueue?.tcIntakeId !== queueUpdate.id) {
           await adminDb.collection('transactions').doc(id).update({
-            tcIntakeId: intakeRef.id,
-            workingWithTc: true,
+            tcIntakeId: queueUpdate.id,
             updatedAt: new Date(),
           });
         }

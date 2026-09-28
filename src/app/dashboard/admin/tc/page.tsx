@@ -36,6 +36,10 @@ type Intake = {
   status: IntakeStatus;
   submittedAt: string;
   updatedAt: string;
+  queueUpdatedAt?: string;
+  lastChangedAt?: string;
+  reopenedAt?: string;
+  lastChangedByRole?: string;
   salePrice?: number | null;
   gci?: number | null;
   contractDate?: string | null;
@@ -59,6 +63,11 @@ const formatCurrency = (n?: number | null) =>
 const formatDate = (s?: string | null) => {
   if (!s) return '—';
   try { return format(parseISO(s), 'MMM d, yyyy'); } catch { return s; }
+};
+
+const formatActivityDate = (s?: string | null) => {
+  if (!s) return '—';
+  try { return format(parseISO(s), 'MMM d, h:mm a'); } catch { return s; }
 };
 
 const STATUS_CONFIG: Record<IntakeStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -401,7 +410,7 @@ export default function TcQueuePage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="whitespace-nowrap">Status</TableHead>
-                        <TableHead className="whitespace-nowrap">Submitted</TableHead>
+                        <TableHead className="whitespace-nowrap">Last Changed</TableHead>
                         <TableHead className="whitespace-nowrap min-w-[200px]">Address</TableHead>
                         <TableHead className="whitespace-nowrap">Agent</TableHead>
                         <TableHead className="whitespace-nowrap">Client</TableHead>
@@ -427,7 +436,8 @@ export default function TcQueuePage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                              {formatDate(intake.submittedAt)}
+                              <div>{formatActivityDate(intake.queueUpdatedAt || intake.lastChangedAt || intake.updatedAt || intake.submittedAt)}</div>
+                              {intake.reopenedAt && <div className="text-amber-700 font-medium">Reopened for review</div>}
                             </TableCell>
                             <TableCell className="min-w-[200px]">
                               <div className="font-medium text-sm truncate max-w-[240px]">{intake.address || intake.propertyAddress || '—'}</div>
