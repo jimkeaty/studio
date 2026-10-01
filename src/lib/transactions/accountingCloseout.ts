@@ -205,7 +205,12 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const brokerPercent = firstPercent(split.companySplitPercent, transaction.brokerPct);
   const brokerGci = isPassThrough ? 0 : firstMoney(split.companyRetained, transaction.brokerGci, transaction.companyDollar);
   const referralDollar = firstMoney(split.referralFeeDollar, transaction.outboundReferralFeeDollar, transaction.outboundReferralFee?.referralDollar) || 0;
-  const agentPercent = isPassThrough ? 100 : firstPercent(split.agentSplitPercent, transaction.agentPct);
+  // Team-member snapshots store the member's direct percentage separately from
+  // the ordinary independent-agent split. Prefer that historical snapshot so
+  // Accounting never displays 0% beside a real member payout.
+  const agentPercent = isPassThrough
+    ? 100
+    : firstPercent(split.memberPercentOfLeaderSide, split.agentSplitPercent, transaction.agentPct);
   const agentNet = isPassThrough
     ? Math.max(0, Math.round((grossGci - referralDollar) * 100) / 100)
     : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);

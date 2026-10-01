@@ -41,12 +41,14 @@ function textValue(item: AccountingItem, id: string, fallback = '—') {
 
 function moneyValue(item: AccountingItem, id: string) {
   const value = field(item, id)?.value;
+  if (value === null || value === undefined || value === '') return '—';
   const amount = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(amount) ? moneyFormatter.format(amount) : '—';
 }
 
 function percentValue(item: AccountingItem, id: string) {
   const value = field(item, id)?.value;
+  if (value === null || value === undefined || value === '') return '—';
   const percent = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(percent) ? `${percent}%` : '—';
 }

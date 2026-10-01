@@ -85,3 +85,15 @@ test('optional accounting details do not block closeout while mandated closed-fi
   assert.equal(fields.get('clientNames')?.state, 'missing');
   assert.deepEqual(requiredAccountingFieldsMissing(snapshot), []);
 });
+
+test('Accounting uses the saved team-member percentage when the independent-agent split is absent', () => {
+  const fields = fieldMap({
+    status: 'closed',
+    splitSnapshot: {
+      memberPercentOfLeaderSide: 75,
+      agentSplitPercent: null,
+    },
+  });
+
+  assert.equal(fields.get('agentPercent')?.value, 75);
+});

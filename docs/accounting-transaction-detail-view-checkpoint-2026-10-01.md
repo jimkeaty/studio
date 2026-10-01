@@ -40,6 +40,15 @@ Accounting needed a transaction-level view with these fields:
 | Production `pnpm build` | Passed |
 | Changed-file TypeScript diagnostics | No diagnostics matching the Accounting Queue or accounting snapshot files; full typecheck retains established baseline conditions outside this change |
 
+## Production readback correction
+
+The first live readback correctly rendered the detail dialog and `Closed` transaction status, but identified two display-only issues before user delivery:
+
+1. Unset optional money and percentage values displayed as `$0.00` or `0%`, which could be mistaken for actual entered zero values.
+2. A current team-member transaction showed `0%` despite a saved member payout because the Accounting snapshot preferred the empty independent-agent percentage over the saved `memberPercentOfLeaderSide` snapshot.
+
+The follow-up release now displays **—** for missing optional values and prefers the saved team-member percentage for the `% to Member` view. It does not change a transaction, a split snapshot, or any financial calculation.
+
 ## Data and deployment boundary
 
 - No production transaction, accounting workflow record, payout, status, or notification preference was changed.

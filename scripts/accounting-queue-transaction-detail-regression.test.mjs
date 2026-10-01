@@ -34,6 +34,10 @@ test('Accounting Queue presents Closed as the transaction status and keeps depar
   assert.doesNotMatch(queue, /New<\/div>/);
 });
 
+test('Accounting detail distinguishes a missing financial or member field from a true zero', () => {
+  assert.match(queue, /if \(value === null \|\| value === undefined \|\| value === ''\) return '—';/);
+});
+
 test('Accounting Queue offers a detailed transaction view without creating a second editor', () => {
   assert.match(queue, /Accounting Transaction Detail/);
   assert.match(queue, /<Eye[\s\S]*?View/);
