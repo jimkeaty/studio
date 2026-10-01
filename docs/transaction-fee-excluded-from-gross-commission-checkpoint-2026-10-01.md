@@ -46,6 +46,8 @@ The current production snapshot was read-only audited before this correction wor
 
 The first deployed version of this release exposed a missing import for `normalizeTransactionVersion` in the editor-load route. The full production build completed, but the authenticated production readback correctly caught the runtime failure before any transaction data was changed. The import was restored, protected by a regression assertion, rebuilt successfully, and released as an immediate follow-up hotfix.
 
+The follow-up production read confirmed that a legacy record can have neither a usable `updatedAt` value nor an ISO timestamp in its data payload. The read route now falls back to the Firestore document's immutable `updateTime`, which provides the canonical version token for the next protected correction. This fallback is also covered by the transaction-save regression.
+
 ## Regression coverage
 
 - Extended commission-base behavior tests with the Critter Creek transaction-fee case: $2,325 stays $2,325 even if a $150 buyer-paid fee is present.

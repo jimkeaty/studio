@@ -1322,7 +1322,7 @@ export async function GET(
       // Firestore legacy writes may store this as a JavaScript Date while newer
       // saves use an ISO string. Always expose one canonical version token so an
       // operational editor sends the required write precondition on its save.
-      updatedAt: normalizeTransactionVersion(data.updatedAt) || null,
+      updatedAt: normalizeTransactionVersion(data.updatedAt) || normalizeTransactionVersion(snap.updateTime) || null,
       // Keep raw type fields intact for the edit form's no-write safeguards while
       // exposing the best available display value to any read-only consumer.
       displayClosingType: resolveTransactionSide(data).side,

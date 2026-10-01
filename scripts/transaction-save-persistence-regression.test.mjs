@@ -59,7 +59,7 @@ test('Task 9: the unified edit form persists its loaded version and shows a refr
 
 test('transaction load responses serialize legacy date versions before an editor can save', () => {
   assert.match(agentTransactionRoute, /import \{ hasTransactionVersionConflict, normalizeTransactionVersion \} from '@\/lib\/transactions\/transactionVersion';/);
-  assert.match(agentTransactionRoute, /updatedAt: normalizeTransactionVersion\(data\.updatedAt\) \|\| null/);
+  assert.match(agentTransactionRoute, /updatedAt: normalizeTransactionVersion\(data\.updatedAt\) \|\| normalizeTransactionVersion\(snap\.updateTime\) \|\| null/);
   assert.match(adminRoute, /if \(val instanceof Date\) return val\.toISOString\(\);/);
 });
 
