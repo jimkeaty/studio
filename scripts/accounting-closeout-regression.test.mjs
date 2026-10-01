@@ -36,8 +36,8 @@ test('accounting snapshot supplies the full requested transaction, commission, r
   assert.match(closeout, /'value' \| 'zero' \| 'missing' \| 'na'/);
   assert.match(closeout, /requiredAccountingFieldsMissing/);
   assert.match(panel, /Client\(s\)/);
-  assert.match(panel, /Agent Take Home/);
-  assert.match(panel, /totalAgentPayout/);
+  assert.match(closeout, /Agent net \/ Primary GCI/);
+  assert.match(panel, /agentNet/);
 });
 
 test('accounting access and completion validation cannot silently bypass incomplete data', () => {

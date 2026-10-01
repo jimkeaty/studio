@@ -18,6 +18,10 @@ export type AccountingActor = {
  * load so corrections made by Admin, Staff, or TC are reflected immediately.
  */
 export const ACCOUNTING_FIELDS = [
+  { id: 'type', label: 'Type', required: false },
+  { id: 'transactionStatus', label: 'Status', required: true },
+  { id: 'dealType', label: 'Deal type', required: false },
+  { id: 'agent', label: 'Agent', required: true },
   { id: 'propertyAddress', label: 'Property address', required: true },
   { id: 'clientNames', label: 'Client name(s)', required: false },
   { id: 'leadSource', label: 'Lead source', required: false },
@@ -28,7 +32,7 @@ export const ACCOUNTING_FIELDS = [
   { id: 'projectedCloseDate', label: 'Projected close date', required: false },
   { id: 'listingExpirationDate', label: 'Expiration date', required: false },
   { id: 'closeDate', label: 'Close date', required: true },
-  { id: 'listPrice', label: 'List price', required: false },
+  { id: 'listPrice', label: 'List price / Buyer rep price', required: false },
   { id: 'salePrice', label: 'Sales price', required: true },
   { id: 'commissionPercent', label: 'Commission percentage', required: false },
   { id: 'grossGci', label: 'GCI', required: true },
@@ -38,7 +42,11 @@ export const ACCOUNTING_FIELDS = [
   { id: 'brokerGci', label: 'Broker GCI', required: true },
   { id: 'referral', label: 'Referral', required: false },
   { id: 'agentPercent', label: 'Percent to agent', required: false },
-  { id: 'agentNet', label: 'Agent net commission', required: true },
+  { id: 'agentNet', label: 'Agent net / Primary GCI', required: true },
+  { id: 'teamMember1', label: 'Team member 1', required: false },
+  { id: 'teamMember1Pct', label: 'Percent to member 1', required: false },
+  { id: 'teamMember1Gci', label: 'Member GCI 1', required: false },
+  { id: 'teamMember2', label: 'Team member 2', required: false },
   { id: 'bonuses', label: 'Agent bonus pass-through', required: false },
   { id: 'totalAgentPayout', label: 'Total agent payout', required: false },
   { id: 'inHouse', label: 'In-house', required: true },
@@ -204,8 +212,15 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const bonus = getAgentBonusPassThrough(transaction);
   const totalAgentPayout = agentNet === null ? null : Math.round((agentNet + bonus) * 100) / 100;
   const referral = referralSummary(transaction, split);
+  const transactionStatus = present(transaction.status).toLowerCase();
 
   const fields: AccountingField[] = [
+    { id: 'type', label: 'Type', required: false, state: textState(transaction.closingType), value: present(transaction.closingType) || null, format: 'text' },
+    // Accounting is a department that processes closed transactions, not a competing
+    // workflow status. The queue API excludes any transaction that is not Closed.
+    { id: 'transactionStatus', label: 'Status', required: false, state: textState(transactionStatus), value: transactionStatus === 'closed' ? 'Closed' : (transactionStatus || null), format: 'text' },
+    { id: 'dealType', label: 'Deal type', required: false, state: textState(transaction.dealType || transaction.transactionType), value: present(transaction.dealType || transaction.transactionType) || null, format: 'text' },
+    { id: 'agent', label: 'Agent', required: true, state: textState(primaryAgent), value: primaryAgent || null, format: 'text' },
     { id: 'propertyAddress', label: 'Property address', required: true, state: textState(transaction.propertyAddress || transaction.address), value: present(transaction.propertyAddress || transaction.address) || null, format: 'text' },
     { id: 'clientNames', label: 'Client name(s)', required: false, state: textState(clientNames), value: clientNames || null, format: 'text' },
     { id: 'leadSource', label: 'Lead source', required: false, state: textState(transaction.dealSource || transaction.source), value: present(transaction.dealSource || transaction.source) || null, format: 'text' },
@@ -226,7 +241,13 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
     { id: 'brokerGci', label: 'Broker GCI', required: true, state: numberState(brokerGci), value: brokerGci, format: 'currency' },
     { id: 'referral', label: 'Referral', required: false, state: textState(referral), value: referral, format: 'text' },
     { id: 'agentPercent', label: 'Percent to agent', required: false, state: numberState(agentPercent), value: agentPercent, format: 'percent' },
-    { id: 'agentNet', label: 'Agent net commission', required: true, state: numberState(agentNet), value: agentNet, format: 'currency' },
+    { id: 'agentNet', label: 'Agent net / Primary GCI', required: true, state: numberState(agentNet), value: agentNet, format: 'currency' },
+    // These three legacy fields are retained for imported historical team data.
+    // Current team payouts remain authoritative in splitSnapshot above.
+    { id: 'teamMember1', label: 'Team member 1', required: false, state: textState(transaction.teamMember1), value: present(transaction.teamMember1) || null, format: 'text' },
+    { id: 'teamMember1Pct', label: 'Percent to member 1', required: false, state: numberState(transaction.teamMember1Pct), value: percent(transaction.teamMember1Pct), format: 'percent' },
+    { id: 'teamMember1Gci', label: 'Member GCI 1', required: false, state: numberState(transaction.teamMember1Gci), value: money(transaction.teamMember1Gci), format: 'currency' },
+    { id: 'teamMember2', label: 'Team member 2', required: false, state: textState(transaction.teamMember2), value: present(transaction.teamMember2) || null, format: 'text' },
     { id: 'bonuses', label: 'Agent bonus pass-through', required: false, state: bonus === 0 ? 'zero' : 'value', value: bonus, format: 'currency' },
     { id: 'totalAgentPayout', label: 'Total agent payout', required: false, state: numberState(totalAgentPayout), value: totalAgentPayout, detail: totalAgentPayout === null ? null : 'Agent net commission + bonus', format: 'currency' },
     { id: 'inHouse', label: 'In-house', required: true, state: yesNoState(inHouseValue), value: inHouseValue, format: 'text' },
