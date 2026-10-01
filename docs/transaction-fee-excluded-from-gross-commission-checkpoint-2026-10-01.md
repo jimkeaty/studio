@@ -71,6 +71,24 @@ The follow-up production read confirmed that a legacy record can have neither a 
 3. Re-read Critter Creek and issue a version-protected canonical transaction update to `$2,325` GCI with the matching 80/20 split.
 4. Re-read the transaction and its relevant rollup fields; do not touch unrelated transactions.
 
+## Production correction completed
+
+**Runtime build verified:** `a6e1c7b-master`
+**Canonical transaction:** `oiAwbKjolhjdcBsgLz29` (TBD 00 Critter Creek)
+
+The transaction was first re-read through the authenticated unified-editor API. The update used the returned Firestore version token as `expectedUpdatedAt` and retained the server's Firestore `lastUpdateTime` precondition. The write would have failed rather than overwritten the file if it had changed between the re-read and the save.
+
+Only the financial correction requested for this transaction was applied:
+
+| Field | Before | After |
+|---|---:|---:|
+| Gross commission / GCI | $2,475.00 | **$2,325.00** |
+| Agent gross split (80%) | $1,980.00 | **$1,860.00** |
+| Brokerage retained (20%) | $495.00 | **$465.00** |
+| Buyer-paid transaction fee | $150.00 | $150.00, separate from GCI |
+
+The post-save authenticated readback returned HTTP 200 and confirmed the persisted $2,325 gross commission, $1,860 agent amount, $465 brokerage amount, 80/20 percentages, buyer fee, cleared manual-GCI flag, and an available transaction version token. No other production transaction was modified.
+
 ## Rollback
 
 Revert the release commit. The change is isolated to transaction-fee treatment in automatic percentage-based GCI calculation, training content, and version-token serialization.
