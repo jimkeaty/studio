@@ -97,3 +97,23 @@ test('Accounting uses the saved team-member percentage when the independent-agen
 
   assert.equal(fields.get('agentPercent')?.value, 75);
 });
+
+test('Accounting derives display-only payout percentages when a legacy team snapshot stores dollars but no percentages', () => {
+  const fields = fieldMap({
+    status: 'closed',
+    gci: 600,
+    agentPct: 0,
+    brokerPct: 0,
+    splitSnapshot: {
+      grossCommission: 600,
+      agentNetCommission: 450,
+      companyRetained: 150,
+      agentSplitPercent: null,
+      companySplitPercent: null,
+      memberPercentOfLeaderSide: null,
+    },
+  });
+
+  assert.equal(fields.get('agentPercent')?.value, 75);
+  assert.equal(fields.get('brokerPercent')?.value, 25);
+});

@@ -19,7 +19,7 @@ export type AccountingActor = {
  */
 export const ACCOUNTING_FIELDS = [
   { id: 'type', label: 'Type', required: false },
-  { id: 'transactionStatus', label: 'Status', required: true },
+  { id: 'transactionStatus', label: 'Status', required: false },
   { id: 'dealType', label: 'Deal type', required: false },
   { id: 'agent', label: 'Agent', required: true },
   { id: 'propertyAddress', label: 'Property address', required: true },
@@ -106,6 +106,19 @@ function firstPercent(...values: unknown[]): number | null {
     if (resolved !== null) return resolved;
   }
   return null;
+}
+
+function firstPositivePercent(...values: unknown[]): number | null {
+  for (const value of values) {
+    const resolved = percent(value);
+    if (resolved !== null && resolved > 0) return resolved;
+  }
+  return null;
+}
+
+function percentageFromPayout(payout: number | null, base: number | null): number | null {
+  if (payout === null || base === null || base <= 0) return null;
+  return Math.round((payout / base) * 10_000) / 100;
 }
 
 function boolValue(value: unknown): boolean | null {
@@ -202,18 +215,25 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
     commissionCalculationMethod: transaction.commissionCalculationMethod,
     commissionFlatAmount: money(transaction.commissionFlatAmount),
   });
-  const brokerPercent = firstPercent(split.companySplitPercent, transaction.brokerPct);
   const brokerGci = isPassThrough ? 0 : firstMoney(split.companyRetained, transaction.brokerGci, transaction.companyDollar);
   const referralDollar = firstMoney(split.referralFeeDollar, transaction.outboundReferralFeeDollar, transaction.outboundReferralFee?.referralDollar) || 0;
+  const payoutBase = firstMoney(split.netAfterReferral, split.grossCommission, grossGci);
   // Team-member snapshots store the member's direct percentage separately from
   // the ordinary independent-agent split. Prefer that historical snapshot so
   // Accounting never displays 0% beside a real member payout.
-  const agentPercent = isPassThrough
-    ? 100
-    : firstPercent(split.memberPercentOfLeaderSide, split.agentSplitPercent, transaction.agentPct);
   const agentNet = isPassThrough
     ? Math.max(0, Math.round((grossGci - referralDollar) * 100) / 100)
     : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
+  const brokerPercent = isPassThrough
+    ? 0
+    : firstPositivePercent(split.companySplitPercent, transaction.brokerPct)
+      ?? percentageFromPayout(brokerGci, payoutBase)
+      ?? firstPercent(split.companySplitPercent, transaction.brokerPct);
+  const agentPercent = isPassThrough
+    ? 100
+    : firstPositivePercent(split.memberPercentOfLeaderSide, split.agentSplitPercent, transaction.agentPct)
+      ?? percentageFromPayout(agentNet, payoutBase)
+      ?? firstPercent(split.memberPercentOfLeaderSide, split.agentSplitPercent, transaction.agentPct);
   const bonus = getAgentBonusPassThrough(transaction);
   const totalAgentPayout = agentNet === null ? null : Math.round((agentNet + bonus) * 100) / 100;
   const referral = referralSummary(transaction, split);

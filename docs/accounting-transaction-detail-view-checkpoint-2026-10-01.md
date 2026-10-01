@@ -49,6 +49,8 @@ The first live readback correctly rendered the detail dialog and `Closed` transa
 
 The follow-up release now displays **—** for missing optional values and prefers the saved team-member percentage for the `% to Member` view. It does not change a transaction, a split snapshot, or any financial calculation.
 
+One legacy team snapshot observed in live readback stored the saved payout dollars but neither a member percentage nor a company percentage. The final display correction derives the shown percentage from the saved payout ÷ saved transaction payout base (after any referral), only when a nonzero saved percentage is unavailable. This is presentation-only and leaves the stored snapshot, GCI, payout, and progression data unchanged.
+
 ## Data and deployment boundary
 
 - No production transaction, accounting workflow record, payout, status, or notification preference was changed.
