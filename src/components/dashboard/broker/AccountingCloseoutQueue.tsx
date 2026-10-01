@@ -233,8 +233,8 @@ export function AccountingCloseoutQueue() {
                 {viewingItem.accounting.status === 'needs_information' && viewingItem.accounting.needsInformation?.detail && <span className="text-muted-foreground">{viewingItem.accounting.needsInformation.detail}</span>}
               </div>
               <AccountingDetailSection item={viewingItem} title="Transaction" fields={['type', 'transactionStatus', 'dealType', 'agent', 'propertyAddress', 'leadSource', 'closeDate']} />
-              <AccountingDetailSection item={viewingItem} title="Financials" fields={['listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'brokerPercent', 'brokerGci', 'referral']} />
-              <AccountingDetailSection item={viewingItem} title="Agent and Team Payouts" fields={['agentPercent', 'agentNet', 'teamMember1', 'teamMember1Pct', 'teamMember1Gci', 'teamMember2']} />
+              <AccountingDetailSection item={viewingItem} title="Financials" fields={['listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'transactionFeePayer', 'brokerPercent', 'brokerGci', 'referral']} />
+              <AccountingDetailSection item={viewingItem} title="Agent and Team Payouts" fields={['agentPercent', 'agentNet', 'agentTakeHome', 'teamMember1', 'teamMember1Pct', 'teamMember1Gci', 'teamMember2']} />
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">

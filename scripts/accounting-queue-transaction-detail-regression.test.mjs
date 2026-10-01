@@ -10,8 +10,8 @@ const route = read('src/app/api/admin/accounting-closeout/route.ts');
 
 const requestedFieldIds = [
   'type', 'transactionStatus', 'dealType', 'agent', 'propertyAddress', 'leadSource', 'closeDate',
-  'listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'brokerPercent',
-  'brokerGci', 'referral', 'agentPercent', 'agentNet', 'teamMember1', 'teamMember1Pct',
+  'listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'transactionFeePayer', 'brokerPercent',
+  'brokerGci', 'referral', 'agentPercent', 'agentNet', 'agentTakeHome', 'teamMember1', 'teamMember1Pct',
   'teamMember1Gci', 'teamMember2',
 ];
 
@@ -21,6 +21,7 @@ test('Accounting snapshot provides the requested transaction and payout detail f
   }
   assert.match(snapshot, /label: 'List price \/ Buyer rep price'/);
   assert.match(snapshot, /label: 'Agent net \/ Primary GCI'/);
+  assert.match(snapshot, /label: 'Agent Take Home'/);
   assert.match(snapshot, /value: transactionStatus === 'closed' \? 'Closed'/);
 });
 
@@ -41,8 +42,8 @@ test('Accounting detail distinguishes a missing financial or member field from a
 test('Accounting Queue offers a detailed transaction view without creating a second editor', () => {
   assert.match(queue, /Accounting Transaction Detail/);
   assert.match(queue, /<Eye[\s\S]*?View/);
-  assert.match(queue, /title="Financials" fields=\{\['listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'brokerPercent', 'brokerGci', 'referral'\]\}/);
-  assert.match(queue, /title="Agent and Team Payouts" fields=\{\['agentPercent', 'agentNet', 'teamMember1', 'teamMember1Pct', 'teamMember1Gci', 'teamMember2'\]\}/);
+  assert.match(queue, /title="Financials" fields=\{\['listPrice', 'salePrice', 'commissionPercent', 'grossGci', 'transactionFee', 'transactionFeePayer', 'brokerPercent', 'brokerGci', 'referral'\]\}/);
+  assert.match(queue, /title="Agent and Team Payouts" fields=\{\['agentPercent', 'agentNet', 'agentTakeHome', 'teamMember1', 'teamMember1Pct', 'teamMember1Gci', 'teamMember2'\]\}/);
   assert.match(queue, /dashboard\/transactions\/new\?edit=\$\{viewingItem\.transactionId\}&accountingCloseout=1/);
 });
 

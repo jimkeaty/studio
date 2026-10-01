@@ -51,6 +51,15 @@ The follow-up release now displays **—** for missing optional values and prefe
 
 One legacy team snapshot observed in live readback stored the saved payout dollars but neither a member percentage nor a company percentage. The final display correction derives the shown percentage from the saved payout ÷ saved transaction payout base (after any referral), only when a nonzero saved percentage is unavailable. This is presentation-only and leaves the stored snapshot, GCI, payout, and progression data unchanged.
 
+## Transaction-Fee Payer and Agent Take-Home Detail
+
+The Accounting detail now makes the transaction-fee payer unambiguous and shows the corresponding primary-agent take-home value:
+
+- **Agent(s) pay from commission:** the fee is identified as a deduction from the responsible agent's take-home; the display shows both **Agent net / Primary GCI** and **Agent Take Home** after the applicable fee allocation.
+- **Buyer pays directly**, **Seller pays directly**, and **Seller-paid closing cost:** the payer is named and the display states that the fee does not reduce agent take-home.
+
+The view calls the canonical `getAgentTakeHome` policy helper rather than introducing a second commission calculation. It is read-only and does not alter GCI, saved split snapshots, transaction data, or rollups.
+
 ## Data and deployment boundary
 
 - No production transaction, accounting workflow record, payout, status, or notification preference was changed.

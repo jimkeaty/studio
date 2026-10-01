@@ -2,6 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getAgentBonusPassThrough } from '@/lib/transactions/resolveAgentBonusPassThrough';
 import { resolveGCI } from '@/lib/commissions';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { getAgentTakeHome } from '@/lib/transactions/agentTakeHome';
 
 export type AccountingFieldState = 'value' | 'zero' | 'missing' | 'na';
 export type AccountingFieldFormat = 'currency' | 'percent' | 'text' | 'date';
@@ -37,12 +38,14 @@ export const ACCOUNTING_FIELDS = [
   { id: 'commissionPercent', label: 'Commission percentage', required: false },
   { id: 'grossGci', label: 'GCI', required: true },
   { id: 'transactionFee', label: 'Transaction fee', required: true },
+  { id: 'transactionFeePayer', label: 'Transaction fee paid by', required: false },
   { id: 'listingFee', label: 'Listing fee', required: false },
   { id: 'brokerPercent', label: 'Broker percentage', required: false },
   { id: 'brokerGci', label: 'Broker GCI', required: true },
   { id: 'referral', label: 'Referral', required: false },
   { id: 'agentPercent', label: 'Percent to agent', required: false },
   { id: 'agentNet', label: 'Agent net / Primary GCI', required: true },
+  { id: 'agentTakeHome', label: 'Agent Take Home', required: true },
   { id: 'teamMember1', label: 'Team member 1', required: false },
   { id: 'teamMember1Pct', label: 'Percent to member 1', required: false },
   { id: 'teamMember1Gci', label: 'Member GCI 1', required: false },
@@ -182,6 +185,34 @@ function referralSummary(transaction: Record<string, any>, split: Record<string,
   return lines.length ? lines.join('; ') : null;
 }
 
+function transactionFeePayerSummary(value: unknown): { label: string | null; impact: string | null } {
+  const payer = present(value).toLowerCase();
+  switch (payer) {
+    case 'agent':
+      return {
+        label: 'Agent(s) pay from commission',
+        impact: 'Deducted from the responsible agent’s take-home pay',
+      };
+    case 'buyer':
+      return {
+        label: 'Buyer pays directly',
+        impact: 'Does not reduce agent take-home pay',
+      };
+    case 'seller':
+      return {
+        label: 'Seller pays directly',
+        impact: 'Does not reduce agent take-home pay',
+      };
+    case 'seller_closing_cost':
+      return {
+        label: 'Seller-paid closing cost',
+        impact: 'Paid from the seller closing-cost pool; does not reduce agent take-home pay',
+      };
+    default:
+      return { label: present(value) || null, impact: null };
+  }
+}
+
 export function buildAccountingSnapshot(transaction: Record<string, any>, transactionId: string) {
   const split = (transaction.splitSnapshot || {}) as Record<string, any>;
   const primaryAgent = present(transaction.agentDisplayName || transaction.agentName || transaction.agentId);
@@ -203,6 +234,7 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const warrantyType = present(transaction.warrantyType || transaction.warrantyAtClosing);
   const warrantyAmount = money(transaction.warrantyAmount);
   const transactionFee = firstMoney(transaction.txComplianceFeeAmount, transaction.buyerTransactionFee, transaction.transactionFeeAmount, transaction.transactionFee);
+  const transactionFeePayer = transactionFeePayerSummary(transaction.txComplianceFeePaidBy || transaction.transactionFeePayer);
   const listingFee = firstMoney(transaction.listingFee);
   const isPassThrough = isPassThroughTransaction(transaction);
   const grossGci = resolveGCI({
@@ -224,6 +256,9 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const agentNet = isPassThrough
     ? Math.max(0, Math.round((grossGci - referralDollar) * 100) / 100)
     : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
+  const agentTakeHome = isPassThrough
+    ? agentNet
+    : getAgentTakeHome(transaction);
   const brokerPercent = isPassThrough
     ? 0
     : firstPositivePercent(split.companySplitPercent, transaction.brokerPct)
@@ -260,13 +295,15 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
     { id: 'salePrice', label: 'Sales price', required: true, state: numberState(transaction.salePrice), value: money(transaction.salePrice), format: 'currency' },
     { id: 'commissionPercent', label: 'Commission percentage', required: false, state: numberState(transaction.commissionPercent), value: percent(transaction.commissionPercent), format: 'percent' },
     { id: 'grossGci', label: 'GCI', required: true, state: grossGci === 0 ? 'zero' : 'value', value: grossGci, format: 'currency' },
-    { id: 'transactionFee', label: 'Transaction fee', required: true, state: numberState(transactionFee), value: transactionFee, detail: present(transaction.txComplianceFeePaidBy || transaction.transactionFeePayer) || null, format: 'currency' },
+    { id: 'transactionFee', label: 'Transaction fee', required: true, state: numberState(transactionFee), value: transactionFee, detail: transactionFeePayer.impact, format: 'currency' },
+    { id: 'transactionFeePayer', label: 'Transaction fee paid by', required: false, state: textState(transactionFeePayer.label), value: transactionFeePayer.label, detail: transactionFeePayer.impact, format: 'text' },
     { id: 'listingFee', label: 'Listing fee', required: false, state: numberState(listingFee), value: listingFee, detail: present(transaction.listingFeePaidBy || transaction.transactionFeePaidBy) || null, format: 'currency' },
     { id: 'brokerPercent', label: 'Broker percentage', required: false, state: numberState(brokerPercent), value: brokerPercent, format: 'percent' },
     { id: 'brokerGci', label: 'Broker GCI', required: true, state: numberState(brokerGci), value: brokerGci, format: 'currency' },
     { id: 'referral', label: 'Referral', required: false, state: textState(referral), value: referral, format: 'text' },
     { id: 'agentPercent', label: 'Percent to agent', required: false, state: numberState(agentPercent), value: agentPercent, format: 'percent' },
     { id: 'agentNet', label: 'Agent net / Primary GCI', required: true, state: numberState(agentNet), value: agentNet, format: 'currency' },
+    { id: 'agentTakeHome', label: 'Agent Take Home', required: true, state: numberState(agentTakeHome), value: agentTakeHome, detail: transactionFeePayer.label === 'Agent(s) pay from commission' ? 'Agent net less the applicable transaction-fee allocation' : 'Same as agent net because the transaction fee is not paid from agent commission', format: 'currency' },
     // These three legacy fields are retained for imported historical team data.
     // Current team payouts remain authoritative in splitSnapshot above.
     { id: 'teamMember1', label: 'Team member 1', required: false, state: textState(transaction.teamMember1), value: present(transaction.teamMember1) || null, format: 'text' },

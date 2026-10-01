@@ -59,6 +59,9 @@ test('Accounting Closeout derives the requested review values from the canonical
   assert.match(String(fields.get('referral')?.value), /Outbound — Referral Partner \(25%\)/);
   assert.equal(fields.get('agentPercent')?.value, 70);
   assert.equal(fields.get('agentNet')?.value, 8400);
+  assert.equal(fields.get('agentTakeHome')?.value, 8400);
+  assert.equal(fields.get('transactionFeePayer')?.value, 'Buyer pays directly');
+  assert.match(String(fields.get('transactionFeePayer')?.detail), /Does not reduce agent take-home pay/);
   assert.equal(fields.get('bonuses')?.value, 3000);
   assert.equal(fields.get('totalAgentPayout')?.value, 11400);
 });
@@ -116,4 +119,35 @@ test('Accounting derives display-only payout percentages when a legacy team snap
 
   assert.equal(fields.get('agentPercent')?.value, 75);
   assert.equal(fields.get('brokerPercent')?.value, 25);
+});
+
+test('Accounting shows an agent-paid transaction fee as a take-home deduction', () => {
+  const fields = fieldMap({
+    status: 'closed',
+    txComplianceFee: 'yes',
+    txComplianceFeeAmount: 395,
+    txComplianceFeePaidBy: 'agent',
+    agentDollar: 5400,
+    splitSnapshot: { agentNetCommission: 5400 },
+  });
+
+  assert.equal(fields.get('transactionFeePayer')?.value, 'Agent(s) pay from commission');
+  assert.match(String(fields.get('transactionFee')?.detail), /Deducted from the responsible agent/);
+  assert.equal(fields.get('agentNet')?.value, 5400);
+  assert.equal(fields.get('agentTakeHome')?.value, 5005);
+});
+
+test('Accounting labels seller closing-cost fees without deducting the agent take-home', () => {
+  const fields = fieldMap({
+    status: 'closed',
+    txComplianceFee: 'yes',
+    txComplianceFeeAmount: 395,
+    txComplianceFeePaidBy: 'seller_closing_cost',
+    agentDollar: 5400,
+    splitSnapshot: { agentNetCommission: 5400 },
+  });
+
+  assert.equal(fields.get('transactionFeePayer')?.value, 'Seller-paid closing cost');
+  assert.match(String(fields.get('transactionFeePayer')?.detail), /does not reduce agent take-home pay/);
+  assert.equal(fields.get('agentTakeHome')?.value, 5400);
 });
