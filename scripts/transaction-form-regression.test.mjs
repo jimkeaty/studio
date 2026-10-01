@@ -182,7 +182,7 @@ test('agent bonus pass-through is separate from commission, splits evenly for co
   assert.match(coAgentAllocationSource, /agentBonusPassThrough: primaryAgentBonus/);
   assert.match(coAgentAllocationSource, /agentBonusPassThrough: coAgentBonus/);
   assert.match(agentRollupSource, /agentBonusPassThrough \+= getAgentBonusPassThrough\(t, agentId\)/);
-  assert.match(agentRollupSource, /totalAgentPayout: num\(agentNetCommission \+ agentBonusPassThrough\)/);
+  assert.match(agentRollupSource, /totalAgentPayout: money\(agentNetCommission \+ agentBonusPassThrough\)/);
   assert.match(agentDashboardSource, /agentBonusPassThrough \+= bonusForAgent/);
   assert.match(agentDashboardSource, /netEarned \+= agentBonusPassThrough/);
   assert.doesNotMatch(agentRollupSource, /totalGCI \+= getAgentBonusPassThrough/);

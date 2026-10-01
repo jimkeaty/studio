@@ -46,6 +46,10 @@ function num(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function money(v: any): number {
+  return Math.round(num(v) * 100) / 100;
+}
+
 function toDate(value: any): Date | null {
   if (!value) return null;
   let d: Date | null = null;
@@ -357,18 +361,18 @@ export async function rebuildAgentRollup(
       listings: totalListings,
       all: totalAll,
     },
-    closedVolume,
-    totalGCI,
-    agentNetCommission,
-    agentBonusPassThrough,
-    totalAgentPayout: num(agentNetCommission + agentBonusPassThrough),
-    companyDollar,
+    closedVolume: money(closedVolume),
+    totalGCI: money(totalGCI),
+    agentNetCommission: money(agentNetCommission),
+    agentBonusPassThrough: money(agentBonusPassThrough),
+    totalAgentPayout: money(agentNetCommission + agentBonusPassThrough),
+    companyDollar: money(companyDollar),
 
     // Anniversary-cycle tier progression stats
     // tierProgressionGci = total GCI within the cycle (used for tier threshold comparison).
     // tierProgressionCompanyDollar = broker's retained dollar within the cycle (kept for compat).
-    tierProgressionGci,
-    tierProgressionCompanyDollar,
+    tierProgressionGci: money(tierProgressionGci),
+    tierProgressionCompanyDollar: money(tierProgressionCompanyDollar),
     // Store the cycle boundaries so the commission API and dashboard can display them
     cycleStart: cycle.cycleStart.toISOString().slice(0, 10),
     cycleEnd: cycle.cycleEnd.toISOString().slice(0, 10),
