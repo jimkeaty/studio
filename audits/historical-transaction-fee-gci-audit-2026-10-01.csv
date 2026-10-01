@@ -1,0 +1,52 @@
+classification,closedDate,year,address,agent,id,payer,fee,expectedGci,savedGci,overstatement
+definite,2023-07-06,2023,301 Ayreshire,Becky Etzel,MjQ6ZWjY7PaPsHUHp3XM,not recorded,150,8250,8400,150
+definite,2024-08-15,2024,1196 Coteau Rodaire Hwy,Greg Landry,zZANQv81XnaAc5mTRw6T,not recorded,150,11100,11250,150
+definite,2024-09-09,2024,102 Deer Treer,Brittanie Thompson,t1X1ZLHRKO4ITbYv1AGz,not recorded,75,6900,6975,75
+definite,2024-09-10,2024,115 Pine Peak Drive,Tyler Albrecht,Lh6DyViUX1c0OmImnrr6,not recorded,395,11550,11945,395
+definite,2024-09-10,2024,1707 Saddle Back Ridge,Joshua Rodriguez,Kggm1hQVlq65pisIZgWF,not recorded,395,11400,11795,395
+definite,2024-09-10,2024,203 Cedar Peak Ln.,Dyllan Hawkins,Wfm0g1lb8BjCoGwsDZxh,not recorded,395,12250,12645,395
+definite,2024-09-25,2024,327 Rena Drive,Ashley Lombas,DSwHNDfMIojiBAqWCoPy,not recorded,150,6450,6600,150
+definite,2024-10-16,2024,120 Old Cane Court,Jessica Parker,L6U0n3bgCDYO4C63PkeX,not recorded,395,10800,11195,395
+definite,2024-10-25,2024,106 Sawtooth Rd,Ashley Lombas,FCcLjBI8pDNprJ2t0HO7,not recorded,150,7950,8100,150
+definite,2024-11-19,2024,203 Oak Heights Dr.,Erin Glynn,i0Z3EUYgtZs4jKANHxvv,not recorded,395,11475,11870,395
+definite,2024-11-27,2024,115 Oak Heights Drive,Joshua Rodriguez,vMZVgoTtp0RUp4pCB4gJ,not recorded,395,10600,10995,395
+definite,2024-11-27,2024,208 Debby Dr,Michele Ezell,TEGt6l2DMPaFVsWkuStt,not recorded,150,5250,5400,150
+definite,2024-11-27,2024,750 Sunset Strip,Tyler Albrecht,qfcIbbNeUFoKqNbox2Dx,not recorded,395,10290,10685,395
+definite,2024-12-02,2024,101 Kettle Court,Erin Glynn,G9H7XBBfBwYtMWOvBmHE,not recorded,150,8250,8400,150
+definite,2025-01-09,2025,205 Milton Estate Lane,Shelly Hebert,TpkC8sQGokfuQiNPyPZv,not recorded,395,6330,6725,395
+definite,2025-02-11,2025,301 Adry Ln,Dyllan Hawkins,USe4PMQRfYLybMxlspAN,not recorded,395,5800,6195,395
+definite,2025-03-11,2025,209 Boxview St,Jason Ray,xngSNP8nkkpi8kMhXVj0,not recorded,150,6500,6650,150
+definite,2025-03-12,2025,107 Bayouview Dr,Renee Dore,z1KfT7T5fEV8KbRMQVbG,not recorded,150,2400,2550,150
+definite,2025-03-12,2025,709 Deer Fork Xing,Rachel North,4fVtDbp1hiUW7jL0nBKp,not recorded,395,8600,8995,395
+definite,2025-04-30,2025,521 Broussard Hill Drive,Joshua Rodriguez,JQGmzxhhOO3rZHvnIrGg,not recorded,395,11925,12320,395
+definite,2025-04-30,2025,832 St Thoms,Tyler Albrecht,udjmX02Oj0VIxg1zGeME,not recorded,395,7200,7595,395
+definite,2025-05-16,2025,404 Easy Rock Landing,Ethan Broussard,lt7of4uMYiDzWBjDylXd,not recorded,150,9450,9600,150
+definite,2025-05-22,2025,134 Senator Picard,NOAH NORRIS,DCtLpZi1VQxvLVYK6gPT,not recorded,395,11950,12345,395
+probable_manual,2025-05-28,2025,419 Rue Canard,Debbie Foreman,Ye4YG2xMMiZnBeacxnpo,buyer,150,6000,6150,150
+definite,2025-06-06,2025,100 Sugarcreek Dr,Chasidy Burnett,OluGefprbFnOOtgrjeNO,not recorded,150,5475,5625,150
+definite,2025-06-18,2025,109 Portsmouth,BETHANY JOHNSON,z4wy5c0uhajXPWbMJZrB,not recorded,395,6450,6845,395
+definite,2025-07-03,2025,302 Cainwood Ct,Scott Domingue,Km2zx5nBtdcz8lgqH8e6,not recorded,395,6798,7193,395
+definite,2025-08-11,2025,142 Foxtrot Ln,Jessica Parker,WU1LUFsy13PI1HhvWH1I,not recorded,395,5475,5870,395
+definite,2025-08-18,2025,2196 Atchafalaya River Hwy L,Chasidy Burnett,QNWZWA6WIXbfG5nPH3Kj,not recorded,395,1350,1745,395
+definite,2025-08-25,2025,104 Esperance Lane,Jason Ray,0qG1GEwnDnyVIElZlGIo,not recorded,150,7380,7530,150
+definite,2025-09-02,2025,701 W 8th St,Scott Domingue,DFzVLB9RSDPgit30zgq5,not recorded,150,3360,3510,150
+definite,2025-09-09,2025,100 Oak Haven Dr,Heather Guidroz,3iMa1MW0kV4PanLAqY2v,not recorded,395,8092.05,8487.05,395
+definite,2025-09-12,2025,102 Blue Harbor Ln,Jim Keaty,eGsXAzjYUS94DiwVcYqE,not recorded,150,10000,10150,150
+definite,2025-09-24,2025,100 Golden Cypress,Derrian Bordelon,sqlSSBCELS0tt5zyESmA,not recorded,395,10500,10895,395
+definite,2025-10-10,2025,234 St. Joseph,Jessica Parker,TyllJJ9A48e9FQTH1LoN,not recorded,395,3900,4295,395
+definite,2025-10-27,2025,217 Amsterdam,Jason Ray,ToGQCA6dQSEJXhCZBpdU,not recorded,150,920,1070,150
+definite,2025-10-31,2025,1638 Grand Bois,Scott Domingue,RmBdqrXsoIHwTCOQdvzF,not recorded,150,3300,3450,150
+definite,2025-11-18,2025,137 & 141 Brothers Road,Tyler Albrecht,18gcy1k0wTaEwNvaCJ3o,not recorded,395,7500,7895,395
+definite,2025-12-01,2025,201 Waterside Drive,Erin Roussel,Yid8v4orhDq4Af3nW4qi,not recorded,395,20250,20645,395
+definite,2025-12-23,2025,1009 Stephen Street,Scott Domingue,Ekyu1Xo2XLY2N6Enm8fq,not recorded,395,5975,6370,395
+definite,2026-03-23,2026,101 Perry Oak Drive,Tyler Albrecht,JpTYOQ5WcUoS0D96uY4o,not recorded,395,8997,9392,395
+definite,2026-03-25,2026,612 Gerald Drive,Tyler Albrecht,jd4NBEj0jKzYYsoj9BGN,not recorded,395,4950,5345,395
+probable_manual,2026-05-04,2026,"201 Rosenstiel Court, Lafayette, LA 70507",Dominic David,Xw6rIzmMtX9qdQ08bWke,buyer,395,4897.25,5292.25,395
+probable_manual,2026-05-06,2026,"208 Harbor Bend Boulevard, Lafayette, LA 70508",Joshua Rodriguez,x4A3EDuY5gUIu5dNFGxF,buyer,395,7500,7895,395
+probable_manual,2026-05-06,2026,"209 Manor House Lane, Lafayette, La 70507",NOAH NORRIS,OyoPPaI4OYe6mK1b2eD7,buyer,395,8550,8945,395
+probable_manual,2026-05-07,2026,115 Lotus Street,Ashley Lombas,D9DgHb7H8RmDwzNOW9AX,agent,395,6864.75,7259.75,395
+probable_manual,2026-05-14,2026,"104 Queensford Way, Youngsville, La 70592",Chasidy Burnett,0UtGqfuiR3uQ4PsmAnyL,buyer,395,6867,7262,395
+probable_manual,2026-05-29,2026,"100 Desert Storm Drive, Duson, LA 70529",NOAH NORRIS,JQT2lfuh06Rz6tJRSbjh,buyer,395,5550,5945,395
+probable_manual,2026-06-18,2026,"510 Saint Thomas St, Lafayette, LA 70506",Debbie Foreman,nsj1qohdjX4gIboD0E8T,agent,150,5340,5490,150
+probable_manual,2026-09-08,2026,1402 Parkview Drive New Iberia LA 70563,Heather Guidroz,gXhYGRrRcOcV3Ga8fIwN,buyer,395,5675,6070,395
+probable_manual,2026-09-30,2026,104 Polaris Drive Lafayette LA 70501,Korsica Friels,TpuBe9FHIIRRvYTODmfl,buyer,395,5850,6245,395
