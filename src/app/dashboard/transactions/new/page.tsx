@@ -2393,6 +2393,36 @@ export default function AddTransactionPage() {
         const resolvedHasCoAgent = Boolean(
           tx.hasCoAgent || tx.isCoListing || resolvedCoAgentId || legacyCoAgentName
         );
+        // Older TC approvals stored outbound referral details only in a nested
+        // object and could leave the boolean flag false. Treat a valid saved
+        // percentage or dollar amount as a referral when reopening, so the
+        // current form neither hides it nor erases it on the next save.
+        const legacyOutboundReferral = tx.outboundReferralFee && typeof tx.outboundReferralFee === 'object'
+          ? tx.outboundReferralFee as Record<string, any>
+          : null;
+        const legacyOutboundReferralDollar = tx.outboundReferralFeeDollar && typeof tx.outboundReferralFeeDollar === 'object'
+          ? tx.outboundReferralFeeDollar as Record<string, any>
+          : null;
+        const resolvedOutboundReferralPercent = Number(
+          tx.outboundReferralFeePercent ??
+          tx.outboundReferralPercent ??
+          legacyOutboundReferral?.referralPercent ??
+          legacyOutboundReferralDollar?.referralPercent ??
+          0,
+        ) || '';
+        const resolvedOutboundReferralDollar = Number(
+          typeof tx.outboundReferralFeeDollar === 'number' ? tx.outboundReferralFeeDollar :
+          tx.outboundReferralDollar ??
+          legacyOutboundReferral?.referralDollar ??
+          legacyOutboundReferral?.referralFeeDollar ??
+          legacyOutboundReferralDollar?.referralDollar ??
+          0,
+        ) || '';
+        const resolvedHasOutboundReferral = Boolean(
+          tx.hasOutboundReferral ||
+          Number(resolvedOutboundReferralPercent) > 0 ||
+          Number(resolvedOutboundReferralDollar) > 0,
+        );
 
         // Some closed legacy files retained their sale price and commission rate but
         // stored `gci` as 0. A zero must not suppress the commission calculation or
@@ -2502,9 +2532,12 @@ export default function AddTransactionPage() {
           coListingAgentPhone: tx.coListingAgentPhone || '',
           coListingAgentSplit: tx.coListingAgentSplit || '',
           outboundReferral: tx.outboundReferral || '',
+          hasOutboundReferral: resolvedHasOutboundReferral,
           outboundReferralAgentName: tx.outboundReferralAgentName || '',
           outboundReferralBrokerage: tx.outboundReferralBrokerage || '',
           outboundReferralFee: tx.outboundReferralFee || '',
+          outboundReferralFeePercent: resolvedOutboundReferralPercent,
+          outboundReferralFeeDollar: resolvedOutboundReferralDollar,
           outboundReferralEmail: tx.outboundReferralEmail || '',
           outboundReferralPhone: tx.outboundReferralPhone || '',
           inboundReferral: tx.inboundReferral || '',

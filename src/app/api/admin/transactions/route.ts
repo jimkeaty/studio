@@ -21,6 +21,7 @@ import {
   OPERATIONAL_TRANSACTION_FORM_FIELDS,
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
+import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -301,7 +302,8 @@ const UPDATABLE_FIELDS = new Set([
   'hasCoAgent', 'coAgent', 'coAgentId', 'coAgentDisplayName', 'coAgentRole',
   'primaryAgentSplitPercent', 'coAgentSplitPercent', 'primaryAgentSideCredit', 'primaryAgentUnitCredit',
   'participantAllocations',
-  // Outbound referral fee — paid to outside broker/relocation company off the top of GCI
+  // Outbound referral fee — paid off the top of GCI before participant splits
+  'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
   'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar',
   // Pre-listing inspection
   'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
@@ -591,7 +593,8 @@ export async function PATCH(req: NextRequest) {
     const COMMISSION_CALCULATION_FIELDS = new Set([
       'agentId', 'commission', 'gci', 'commissionPercent', 'commissionBasePrice',
       'commissionCalculationMethod', 'commissionFlatAmount', 'salePrice',
-      'dealSource', 'outboundReferralFee', 'outboundReferralFeePercent',
+      'dealSource', 'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent',
+      'outboundReferralFeeDollar', 'outboundReferralDollar',
       'closedDate', 'contractDate',
     ]);
     const hasCommissionCalculationChange = Object.keys(body)
@@ -603,11 +606,7 @@ export async function PATCH(req: NextRequest) {
         effectiveTransaction.splitSnapshot?.grossCommission ??
         0,
       );
-      const referralPercent = Number(
-        effectiveTransaction.outboundReferralFee?.referralPercent ??
-        effectiveTransaction.outboundReferralFeePercent ??
-        0,
-      );
+      const referral = resolveOutboundReferral(effectiveTransaction, grossCommission);
       const agentId = String(effectiveTransaction.agentId || '').trim();
       if (agentId && grossCommission > 0) {
         try {
@@ -616,7 +615,8 @@ export async function PATCH(req: NextRequest) {
             agentDisplayName: String(effectiveTransaction.agentDisplayName || '').trim(),
             commission: grossCommission,
             dealSource: String(effectiveTransaction.dealSource || '').trim() || null,
-            referralFeePercent: referralPercent > 0 ? referralPercent : null,
+            referralFeePercent: referral.active ? referral.referralFeePercent : null,
+            referralFeeDollar: referral.active ? referral.referralFeeDollar : null,
             transactionDate: effectiveTransaction.closedDate || effectiveTransaction.contractDate || null,
             transactionId: id,
           });
@@ -1052,56 +1052,6 @@ export async function PATCH(req: NextRequest) {
     }
     // Closed co-agent files remain on this same transaction ID. The allocation
     // record above provides each agent's volume, net, fee, and unit credit.
-
-    // ── Retroactive referral fee recalculation ─────────────────────────────────────────
-    // When a referral fee is added/changed on a closed transaction, recalculate the
-    // agent's commission using the net-after-referral GCI and update the splitSnapshot.
-    // Rollup is already rebuilt above so it will pick up the new splitSnapshot values.
-    // SKIP if the admin has manually overridden the commission split — preserve their values.
-    const referralChanged = updates.outboundReferralFee !== undefined;
-    const isCommissionOverridden = updates.commissionOverridden === true || existingData?.commissionOverridden === true;
-    // Only recalculate if the referral fee actually changed from the stored value
-    const existingReferralPct = Number(existingData?.outboundReferralFee?.referralPercent ?? 0);
-    const newReferralPct = updates.outboundReferralFee ? Number(updates.outboundReferralFee.referralPercent ?? 0) : existingReferralPct;
-    const referralActuallyChanged = referralChanged && (newReferralPct !== existingReferralPct);
-    if (referralActuallyChanged && !isCommissionOverridden) {
-      try {
-        const txData = updatedSnap.data() as any;
-        const agentId = String(txData?.agentId || '').trim();
-        const agentDisplayName = String(txData?.agentDisplayName || '').trim();
-        const txStatus = String(txData?.status || '').trim();
-        const referralFee = txData?.outboundReferralFee as Record<string, any> | null;
-        const referralPct = referralFee ? Number(referralFee.referralPercent ?? 0) : 0;
-        const grossGci = Number(txData?.gci ?? txData?.commission ?? txData?.splitSnapshot?.grossCommission ?? 0);
-
-        if (agentId && grossGci > 0 && txStatus === 'closed') {
-          const calc = await resolveTransactionCalculation({
-            agentId,
-            agentDisplayName,
-            commission: grossGci,
-            dealSource: String(txData?.dealSource || '').trim() || null,
-            referralFeePercent: referralPct > 0 ? referralPct : null,
-            transactionDate: txData?.closedDate || txData?.contractDate || null,
-            transactionId: id,
-          });
-          const newSplitSnapshot = {
-            ...(txData?.splitSnapshot || {}),
-            ...calc.splitSnapshot,
-          };
-          await adminDb.collection('transactions').doc(id).update({
-            splitSnapshot: newSplitSnapshot,
-            commission: grossGci,
-            updatedAt: new Date(),
-          });
-          // Rebuild rollup with updated splitSnapshot
-          const txYear = Number(txData?.year || new Date().getFullYear());
-          await rebuildAgentRollup(adminDb, agentId, txYear);
-          console.log(`[api/admin/transactions] Referral fee recalculation complete for ${id}`);
-        }
-      } catch (referralErr: any) {
-        console.warn('[api/admin/transactions] Referral fee recalculation failed (non-fatal):', referralErr?.message);
-      }
-    }
 
     return NextResponse.json({ ok: true, transaction: updated });
   } catch (err: any) {

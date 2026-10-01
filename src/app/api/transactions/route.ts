@@ -5,6 +5,7 @@ import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup'
 import { isAdminLike } from '@/lib/auth/staffAccess'
 import { normalizeDealSource } from '@/lib/normalizeDealSource'
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations'
+import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
 
     const year = toYearFromDates(closedDate, contractDate)
     const now = new Date()
+    const outboundReferral = resolveOutboundReferral(body, commission)
 
     // If the admin already provided a manual splitSnapshot, use it directly
     // instead of running the tier-based calculation (which requires tiers to be configured)
@@ -89,6 +91,8 @@ export async function POST(req: NextRequest) {
           commission,
           dealSource: normalizeDealSource(body.dealSource),
           transactionDate: closedDate || contractDate,
+          referralFeePercent: outboundReferral.active ? outboundReferral.referralFeePercent : null,
+          referralFeeDollar: outboundReferral.active ? outboundReferral.referralFeeDollar : null,
         })
         splitSnapshot = calculation.splitSnapshot
         creditSnapshot = calculation.creditSnapshot
@@ -260,6 +264,18 @@ export async function POST(req: NextRequest) {
 
       splitSnapshot,
       creditSnapshot,
+
+      // Store one scalar referral contract. Legacy nested values remain for
+      // compatibility, but downstream calculations use these normalized values.
+      hasOutboundReferral: outboundReferral.active,
+      outboundReferralAgentName: toOptionalString(body.outboundReferralAgentName),
+      outboundReferralBrokerage: toOptionalString(body.outboundReferralBrokerage),
+      outboundReferralFeePercent: outboundReferral.referralFeePercent,
+      outboundReferralFeeDollar: outboundReferral.referralFeeDollar,
+      outboundReferralFee: body.outboundReferralFee ?? (outboundReferral.active ? {
+        referralPercent: outboundReferral.referralFeePercent,
+        referralDollar: outboundReferral.referralFeeDollar,
+      } : null),
 
       // Co-agent fields
       hasCoAgent,

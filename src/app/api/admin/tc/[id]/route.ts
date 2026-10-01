@@ -11,6 +11,7 @@ import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
+import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import {
@@ -569,7 +570,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Recalculate splitSnapshot when commission fields change ──────────
         // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
         // Without this, commission edits appear to save but the displayed values don't update.
-        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource']);
+        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource', 'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralDollar']);
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
         const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
@@ -606,6 +607,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             const agentIdForCalc = String(currentTxForUpdate.agentId || intake.agentId || '').trim();
             if (newGCI > 0 && agentIdForCalc) {
               const txDate = merged.closedDate || merged.contractDate || null;
+              const referral = resolveOutboundReferral(mergedWithMethod, newGCI);
               const calculation = await resolveTransactionCalculation({
                 agentId: agentIdForCalc,
                 agentDisplayName: String(currentTxForUpdate.agentDisplayName || intake.agentDisplayName || '').trim(),
@@ -613,6 +615,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 dealSource: String(mergedWithMethod.dealSource || '').trim() || null,
                 transactionDate: txDate,
                 transactionId: linkedTxId,
+                referralFeePercent: referral.active ? referral.referralFeePercent : null,
+                referralFeeDollar: referral.active ? referral.referralFeeDollar : null,
               });
               txSyncUpdate.commission = newGCI;
               txSyncUpdate.splitSnapshot = calculation.splitSnapshot;
@@ -653,6 +657,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           });
           Object.assign(txSyncUpdate, cooperatingCommission.updates);
           enforcePassThroughFinancialPolicy(versionedTransactionSnap.data() || {}, txSyncUpdate);
+          const allocationSource = { ...(versionedTransactionSnap.data() || {}), ...txSyncUpdate };
+          if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
+            Object.assign(txSyncUpdate, await buildCoAgentAllocationUpdate(adminDb, allocationSource));
+          }
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();
             if (body.expectedTransactionUpdatedAt) {
@@ -857,16 +865,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Outbound referral fee: deducted OFF THE TOP before any agent/co-agent split ──
         // The referral fee is a % of TOTAL GCI paid to an outside broker/relocation company.
         // We deduct it first, then split the remaining net between primary and co-agent.
-        // The resolver does NOT receive referralFeePercent — the deduction is already done here
-        // to prevent double-deduction (the resolver would deduct again if passed referralFeePercent).
-        const referralFeeData = intake.outboundReferralFee as Record<string, any> | null | undefined;
-        const referralPct = referralFeeData ? Number(referralFeeData.referralPercent ?? 0) : 0;
-        const referralDollarOverride = referralFeeData ? Number(referralFeeData.referralDollar ?? 0) : 0;
-        const referralFeeDollar = referralPct > 0
-          ? (referralDollarOverride > 0 ? referralDollarOverride : Number((commission * (referralPct / 100)).toFixed(2)))
-          : 0;
+        // The co-agent refresh below stores a per-participant gross/referral
+        // snapshot. These preliminary net shares avoid a temporary double deduction.
+        const referral = resolveOutboundReferral(intake, commission);
         // Net GCI available for agent/broker splits after referral is paid out
-        const netAfterReferral = Number(Math.max(0, commission - referralFeeDollar).toFixed(2));
+        const netAfterReferral = referral.netAfterReferral;
 
         // If co-agent is present, split the POST-REFERRAL net between primary and co-agent
         const hasCoAgent = !!intake.hasCoAgent;
@@ -884,10 +887,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
         let calc: Awaited<ReturnType<typeof resolveTransactionCalculation>>;
         try {
-          // Referral deduction already applied in primaryShare; pass null to avoid double-deduction
+          // A co-agent file is refreshed by buildCoAgentAllocationUpdate after
+          // persistence. A solo file retains the full gross/referral snapshot.
           calc = await resolveTransactionCalculation({
-            agentId, agentDisplayName, commission: primaryShare, transactionDate: txDate,
-            referralFeePercent: null,
+            agentId,
+            agentDisplayName,
+            commission: hasCoAgent && coAgentId ? primaryShare : commission,
+            transactionDate: txDate,
+            referralFeePercent: hasCoAgent && coAgentId ? null : referral.referralFeePercent,
+            referralFeeDollar: hasCoAgent && coAgentId ? null : referral.referralFeeDollar,
           });
         } catch (calcErr: any) {
           // Commission profile not found — fall back to a zero-split snapshot so
@@ -1119,8 +1127,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         commissionOverrideBy: intake.commissionOverride ? toOptStr(intake.commissionOverrideBy) : null,
         commissionOverrideAt: intake.commissionOverride ? intake.commissionOverrideAt : null,
 
-        // Outbound referral fee
-        outboundReferralFee: intake.outboundReferralFee ?? null,
+        // Outbound referral fee: preserve the scalar form fields used by the
+        // unified editor as well as a legacy nested object when present.
+        hasOutboundReferral: referral.active,
+        outboundReferralAgentName: toOptStr(intake.outboundReferralAgentName),
+        outboundReferralBrokerage: toOptStr(intake.outboundReferralBrokerage),
+        outboundReferralFeePercent: referral.referralFeePercent,
+        outboundReferralFeeDollar: referral.referralFeeDollar,
+        outboundReferralFee: intake.outboundReferralFee ?? (referral.active ? {
+          referralPercent: referral.referralFeePercent,
+          referralDollar: referral.referralFeeDollar,
+        } : null),
 
         notes: toOptStr(intake.notes),
         additionalComments: toOptStr(intake.additionalComments),

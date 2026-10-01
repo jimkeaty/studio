@@ -517,7 +517,9 @@ export async function resolveTransactionCalculation(
     }
 
     const agentNetCommission = asMoney(commission * (agentSplitPercent / 100));
-    const companyRetained = asMoney(commission * (companySplitPercent / 100));
+    // Assign a rounding remainder to the company side so a per-agent snapshot
+    // always reconciles to the post-referral commission base exactly.
+    const companyRetained = asMoney(commission - agentNetCommission);
 
     return {
       calculationModel: 'individual',

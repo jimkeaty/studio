@@ -14,6 +14,8 @@ import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVer
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
+import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
+import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import {
   DIRECT_SPLIT_FIELDS,
   mergeOperationalDirectSplit,
@@ -127,6 +129,7 @@ const EDITABLE_TX_FIELDS = new Set([
 // Fields that trigger a commission recalculation when changed
 const COMMISSION_TRIGGER_FIELDS = new Set([
   'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource',
+  'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralDollar',
 ]);
 // Fields that directly set split values — when ONLY these change (no GCI change),
 // merge them straight into splitSnapshot instead of running a profile recalculation.
@@ -366,6 +369,7 @@ export async function PATCH(
               if (agentId) {
                 const txDate = allowed.closedDate || allowed.contractDate ||
                   currentTx.closedDate || currentTx.contractDate || null;
+                const referral = resolveOutboundReferral(merged, newGCI);
                 const calculation = await resolveTransactionCalculation({
                   agentId,
                   agentDisplayName,
@@ -373,6 +377,8 @@ export async function PATCH(
                   dealSource: String(merged.dealSource || '').trim() || null,
                   transactionDate: txDate,
                   transactionId: item.transactionId,
+                  referralFeePercent: referral.active ? referral.referralFeePercent : null,
+                  referralFeeDollar: referral.active ? referral.referralFeeDollar : null,
                 });
                 allowed.commission = newGCI;
                 allowed.splitSnapshot = calculation.splitSnapshot;
@@ -407,6 +413,14 @@ export async function PATCH(
         const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
         if (hasDirectSplitChange && !isPassThrough) mergeOperationalDirectSplit(currentTx, allowed);
         enforcePassThroughFinancialPolicy(currentTx, allowed);
+        const allocationSource = { ...currentTx, ...allowed };
+        if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
+          try {
+            Object.assign(allowed, await buildCoAgentAllocationUpdate(adminDb, allocationSource));
+          } catch (allocationErr: any) {
+            console.warn('[staff-queue PATCH] Co-agent allocation refresh failed; preserving existing allocation:', allocationErr?.message);
+          }
+        }
         try {
           if (cooperatingCommission.auditEvent) {
             const batch = adminDb.batch();

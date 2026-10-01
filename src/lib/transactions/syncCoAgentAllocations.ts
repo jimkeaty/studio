@@ -2,6 +2,10 @@ import 'server-only';
 
 import type { Firestore } from 'firebase-admin/firestore';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import {
+  allocateOutboundReferralAcrossCoAgents,
+  resolveOutboundReferral,
+} from '@/lib/transactions/outboundReferral';
 
 type AnyRecord = Record<string, any>;
 
@@ -69,12 +73,30 @@ export async function buildCoAgentAllocationUpdate(
   const coAgentName = String(coAgent?.agentDisplayName || coAgent?.agentName || transaction.coAgentDisplayName || '').trim();
   const primaryGci = money(totalGci * (primaryPercent / 100));
   const coGci = money(totalGci * (coPercent / 100));
+  const referral = resolveOutboundReferral(transaction, totalGci);
+  const referralAllocation = referral.active
+    ? allocateOutboundReferralAcrossCoAgents(referral.referralFeeDollar, primaryPercent)
+    : null;
+  const primaryReferralDollar = referralAllocation?.primaryReferralFeeDollar ?? null;
+  const coReferralDollar = referralAllocation?.coAgentReferralFeeDollar ?? null;
 
   const [primaryCalc, coCalc] = await Promise.all([
     primaryAgentId
-      ? resolveTransactionCalculation({ agentId: primaryAgentId, agentDisplayName: primaryAgentName, commission: primaryGci, referralFeePercent: null })
+      ? resolveTransactionCalculation({
+        agentId: primaryAgentId,
+        agentDisplayName: primaryAgentName,
+        commission: primaryGci,
+        referralFeePercent: referral.active ? referral.referralFeePercent : null,
+        referralFeeDollar: primaryReferralDollar,
+      })
       : Promise.resolve(null),
-    resolveTransactionCalculation({ agentId: coAgentId, agentDisplayName: coAgentName, commission: coGci, referralFeePercent: null }),
+    resolveTransactionCalculation({
+      agentId: coAgentId,
+      agentDisplayName: coAgentName,
+      commission: coGci,
+      referralFeePercent: referral.active ? referral.referralFeePercent : null,
+      referralFeeDollar: coReferralDollar,
+    }),
   ]);
 
   const primarySnapshot = primaryCalc?.splitSnapshot
@@ -109,6 +131,11 @@ export async function buildCoAgentAllocationUpdate(
     txComplianceFeeCoAgentAmount: coFee,
     splitSnapshot: primarySnapshot ?? transaction.splitSnapshot ?? null,
     creditSnapshot: primaryCalc?.creditSnapshot ?? transaction.creditSnapshot ?? null,
+    // Ledger convenience fields must match the canonical primary snapshot.
+    agentDollar: primarySnapshot?.agentNetCommission ?? transaction.agentDollar ?? null,
+    brokerGci: primarySnapshot?.companyRetained ?? transaction.brokerGci ?? null,
+    agentNetCommission: primarySnapshot?.agentNetCommission ?? transaction.agentNetCommission ?? null,
+    companyRetained: primarySnapshot?.companyRetained ?? transaction.companyRetained ?? null,
     coAgent: canonicalCoAgent,
     participantAllocations: {
       version: 1,
@@ -119,6 +146,7 @@ export async function buildCoAgentAllocationUpdate(
         volumeCredit: money(salePrice * (primaryPercent / 100)),
         closedUnitCredit: 1,
         grossCommission: primaryGci,
+        referralFeeDollar: primaryReferralDollar,
         transactionFeeDeduction: primaryFee,
         netCommission: primarySnapshot?.agentNetCommission ?? 0,
         agentBonusPassThrough: primaryAgentBonus,
@@ -131,6 +159,7 @@ export async function buildCoAgentAllocationUpdate(
         volumeCredit: money(salePrice * (coPercent / 100)),
         closedUnitCredit: 1,
         grossCommission: coGci,
+        referralFeeDollar: coReferralDollar,
         transactionFeeDeduction: coFee,
         netCommission: coSnapshot?.agentNetCommission ?? 0,
         agentBonusPassThrough: coAgentBonus,

@@ -10,6 +10,7 @@ import { getAllStaffUids, getTcUids, getStaffUidsForAgent } from '@/lib/notifica
 import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
+import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
@@ -378,6 +379,11 @@ export async function PATCH(
       updates.gci !== undefined ||
       updates.commissionCalculationMethod !== undefined ||
       updates.commissionFlatAmount !== undefined ||
+      updates.hasOutboundReferral !== undefined ||
+      updates.outboundReferralFee !== undefined ||
+      updates.outboundReferralFeePercent !== undefined ||
+      updates.outboundReferralFeeDollar !== undefined ||
+      updates.outboundReferralDollar !== undefined ||
       (updates.status !== undefined && updates.status !== txData.status)
     );
 
@@ -423,6 +429,7 @@ export async function PATCH(
           const agentIdForCalc = String(txData.agentId || uid);
           const agentDisplayNameForCalc = String(txData.agentDisplayName || '');
           const txDate = mergedForCalc.closedDate || mergedForCalc.contractDate || null;
+          const referral = resolveOutboundReferral(mergedForCalc, rawGci);
           if (!manualDollarSplitOverride) {
             try {
               const calc = await resolveTransactionCalculation({
@@ -431,6 +438,8 @@ export async function PATCH(
                 commission: rawGci,
                 transactionDate: txDate,
                 transactionId: txId,
+                referralFeePercent: referral.active ? referral.referralFeePercent : null,
+                referralFeeDollar: referral.active ? referral.referralFeeDollar : null,
               });
               updates.splitSnapshot = calc.splitSnapshot;
               updates.creditSnapshot = calc.creditSnapshot;
