@@ -1456,10 +1456,10 @@ export const ARTICLES: Article[] = [
     publishedAt: '2026-08-09',
     content: `
 <h2>Overview</h2>
-<p>When entering a buyer transaction in Smart Broker USA, three items can affect the final commission split: the <strong>Shortage in Commission</strong>, the <strong>Transaction Compliance Fee ($395)</strong>, and the <strong>Home Warranty</strong>. The financial impact of each item depends entirely on <em>who is paying for it</em>. This guide explains the exact rules for each scenario.</p>
+<p>When entering a buyer transaction in Smart Broker USA, three items can be recorded: the <strong>Shortage in Commission</strong>, the <strong>Transaction Compliance Fee ($395)</strong>, and the <strong>Home Warranty</strong>. The transaction compliance fee is <strong>never</strong> part of Gross Commission Income (GCI), tier lookup, or an agent/broker commission split. This guide explains the remaining adjustments and how the fee is handled separately.</p>
 
 <h2>Payment Options and Their Financial Effect</h2>
-<p>Each item has multiple payment options. The table below shows the exact effect on Gross Commission Income (GCI), the seller-paid closing cost pool, and the agent's take-home pay.</p>
+<p>A shortage or warranty may have different treatment based on who pays. The transaction compliance fee has one fixed rule: it never changes GCI or the commission split.</p>
 
 <table>
   <thead>
@@ -1472,11 +1472,12 @@ export const ARTICLES: Article[] = [
   </thead>
   <tbody>
     <tr><td><strong>Agent Absorbed</strong></td><td>No*</td><td>No</td><td>Depends on item (see below)</td></tr>
-    <tr><td><strong>Buyer Pays Directly</strong></td><td>Yes</td><td>No</td><td>No</td></tr>
+    <tr><td><strong>Buyer Pays Directly</strong></td><td>Yes*</td><td>No</td><td>No</td></tr>
     <tr><td><strong>Seller Pays Directly</strong> (Warranty only)</td><td>No</td><td>No</td><td>No</td></tr>
-    <tr><td><strong>Seller Pays from Closing Cost</strong></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+    <tr><td><strong>Seller Pays from Closing Cost</strong></td><td>Yes*</td><td>Yes</td><td>No</td></tr>
   </tbody>
 </table>
+<p><small>*For a shortage or home warranty where that payment contractually adds to commission. The <strong>transaction compliance fee is excluded</strong> in every payer scenario.</small></p>
 
 <h2>The Three Items — Exact Rules When Agent Absorbs</h2>
 
@@ -1487,6 +1488,7 @@ export const ARTICLES: Article[] = [
 <h3>2. Transaction Compliance Fee — $395 (Agent Pays)</h3>
 <p>When the agent pays the $395 fee, it is treated as a <strong>post-split deduction</strong>. The split is calculated on the full GCI first, and then the $395 is deducted from the agent's net at the end.</p>
 <blockquote>Example: GCI is $6,000. Agent split is 70% = $4,200. Then $395 is deducted. Agent take-home = $3,805.</blockquote>
+<p>When the buyer or seller pays the transaction fee, the fee is recorded as a separate settlement charge. It does <strong>not</strong> increase GCI, the brokerage share, the agent split, or tier progress.</p>
 
 <h3>3. Home Warranty (Agent Pays)</h3>
 <p>When the agent pays the home warranty, it is treated as a <strong>pre-split reduction</strong>. The warranty cost is deducted from the GCI <em>before</em> the split is calculated. This means the agent's split percentage is applied to a lower base amount.</p>
@@ -1497,7 +1499,7 @@ export const ARTICLES: Article[] = [
 
 <h3>How the Pool Works</h3>
 <ul>
-  <li>Items paid from the pool are <strong>subtracted from the pool balance</strong> and <strong>added to the GCI</strong> before the split.</li>
+  <li>Items paid from the pool are <strong>subtracted from the pool balance</strong>. A qualifying shortage or warranty can add to GCI before the split; the transaction compliance fee never does.</li>
   <li>The remaining pool balance is displayed to all roles (Agent, TC, Staff, Admin) in the transaction form.</li>
   <li>If the allocated items exceed the pool total, the system will display a warning.</li>
 </ul>
@@ -1510,10 +1512,10 @@ export const ARTICLES: Article[] = [
   <tbody>
     <tr><td>Total Seller-Paid Closing Cost</td><td>$5,000</td><td>—</td><td>—</td></tr>
     <tr><td>Shortage in Commission (from pool)</td><td>$1,000</td><td>−$1,000</td><td>+$1,000</td></tr>
-    <tr><td>Transaction Compliance Fee (from pool)</td><td>$395</td><td>−$395</td><td>+$395</td></tr>
+    <tr><td>Transaction Compliance Fee (from pool)</td><td>$395</td><td>−$395</td><td>No GCI effect</td></tr>
     <tr><td>Home Warranty (from pool)</td><td>$700</td><td>−$700</td><td>+$700</td></tr>
     <tr><td><strong>Remaining for Buyer Closing Costs</strong></td><td><strong>$2,905</strong></td><td>—</td><td>—</td></tr>
-    <tr><td><strong>Adjusted GCI (Base + Pool Items)</strong></td><td colspan="3"><strong>$9,000 + $2,095 = $11,095</strong> (on a $300K sale at 3%)</td></tr>
+    <tr><td><strong>Adjusted GCI (Base + qualifying Pool Items)</strong></td><td colspan="3"><strong>$9,000 + $1,700 = $10,700</strong> (on a $300K sale at 3%)</td></tr>
   </tbody>
 </table>
 
@@ -1537,9 +1539,9 @@ export const ARTICLES: Article[] = [
   <tbody>
     <tr><td>Sale Price × Commission %</td><td>$200,000 × 3%</td><td>$6,000 Base GCI</td></tr>
     <tr><td>Warranty (Agent Pays)</td><td>$6,000 − $500 (pre-split)</td><td>$5,500 GCI</td></tr>
-    <tr><td>Tx Fee (Buyer Pays)</td><td>+$395 added to GCI</td><td>$5,895 Adjusted GCI</td></tr>
-    <tr><td>Agent Split (70%)</td><td>$5,895 × 70%</td><td>$4,126.50</td></tr>
-    <tr><td>No post-split deductions</td><td>—</td><td><strong>$4,126.50 Agent Take-Home</strong></td></tr>
+    <tr><td>Tx Fee (Buyer Pays)</td><td>Separate settlement charge — not GCI</td><td>$5,500 GCI remains</td></tr>
+    <tr><td>Agent Split (70%)</td><td>$5,500 × 70%</td><td>$3,850</td></tr>
+    <tr><td>No post-split deductions</td><td>—</td><td><strong>$3,850 Agent Take-Home</strong></td></tr>
   </tbody>
 </table>
 
@@ -1548,9 +1550,10 @@ export const ARTICLES: Article[] = [
   <thead><tr><th>Step</th><th>Calculation</th><th>Result</th></tr></thead>
   <tbody>
     <tr><td>Sale Price × Commission %</td><td>$300,000 × 3%</td><td>$9,000 Base GCI</td></tr>
-    <tr><td>Shortage + Tx Fee + Warranty (from pool)</td><td>+$1,000 + $395 + $700</td><td>$11,095 Adjusted GCI</td></tr>
-    <tr><td>Agent Split (70%)</td><td>$11,095 × 70%</td><td>$7,766.50</td></tr>
-    <tr><td>No post-split deductions</td><td>—</td><td><strong>$7,766.50 Agent Take-Home</strong></td></tr>
+    <tr><td>Shortage + Warranty (from pool)</td><td>+$1,000 + $700</td><td>$10,700 Adjusted GCI</td></tr>
+    <tr><td>Tx Fee (from pool)</td><td>$395 settlement charge — excluded from GCI</td><td>$10,700 GCI remains</td></tr>
+    <tr><td>Agent Split (70%)</td><td>$10,700 × 70%</td><td>$7,490</td></tr>
+    <tr><td>No post-split deductions</td><td>—</td><td><strong>$7,490 Agent Take-Home</strong></td></tr>
     <tr><td>Pool Remaining</td><td>$5,000 − $2,095</td><td><strong>$2,905 for Buyer Closing Costs</strong></td></tr>
   </tbody>
 </table>
@@ -1572,9 +1575,9 @@ export const ARTICLES: Article[] = [
 <h2>Quick Reference</h2>
 <ul>
   <li><strong>Shortage (Agent Absorbs):</strong> Write-off. No GCI effect. No deduction from agent net.</li>
-  <li><strong>Tx Fee (Agent Pays):</strong> Post-split deduction. Deducted from agent net after split is calculated.</li>
+  <li><strong>Transaction Fee:</strong> Never GCI and never part of the agent/broker split. Deduct it from agent take-home only when the agent pays; otherwise record it separately at settlement.</li>
   <li><strong>Warranty (Agent Pays):</strong> Pre-split reduction. Deducted from GCI before split is calculated.</li>
-  <li><strong>Any item (Buyer Pays Directly or from Closing Cost Pool):</strong> Adds to GCI before split. No deduction from agent net.</li>
+  <li><strong>Qualifying shortage or warranty (Buyer Pays Directly or from Closing Cost Pool):</strong> Adds to GCI before split. No deduction from agent net. This rule does not apply to the transaction fee.</li>
 </ul>
     `,
   },

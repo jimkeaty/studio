@@ -3,6 +3,8 @@
 **Date:** 2026-10-01  
 **Scope:** Correct the Listing Commission summary in the unified transaction editor so pending and closed listings show the saved sale-price-aware commission base rather than a stale list-price estimate.
 
+> **Correction — 2026-10-01:** The transaction-fee interpretation in this checkpoint was superseded after business clarification. A transaction/compliance fee is never GCI and is never part of an agent/broker commission split. See `docs/transaction-fee-excluded-from-gross-commission-checkpoint-2026-10-01.md` for the controlling policy and Critter Creek correction sequence.
+
 ## Production read-only findings
 
 Authenticated production inspection of `transactions/oiAwbKjolhjdcBsgLz29` (**TBD 00 Critter Creek**) confirmed:

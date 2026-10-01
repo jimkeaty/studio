@@ -24,6 +24,7 @@ import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroug
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
+  if (val instanceof Date) return val.toISOString();
   if (typeof val?.toDate === 'function') return val.toDate().toISOString();
   if (Array.isArray(val)) return val.map(serializeFirestore);
   if (typeof val === 'object') {

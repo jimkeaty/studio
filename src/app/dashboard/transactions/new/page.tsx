@@ -32,6 +32,7 @@ import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
 import { resolveCommissionBase, resolveGCI } from '@/lib/commissions';
+import { calculatePercentageGrossCommission } from '@/lib/transactions/percentageGrossCommission';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
@@ -1824,34 +1825,22 @@ export default function AddTransactionPage() {
     if (cbp > 0 && pct > 0) {
       // Base commission from seller (CBP × %)
       const baseGCI = resolveGCI({ commissionBasePrice: cbp, commissionPercent: pct });
-      // Add shortage if buyer is paying directly or through seller closing cost
-      const shortageAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
-        form.getValues('shortageHandledBy') || ''
-      );
-      const shortageAdd = (form.getValues('shortageInCommission') === 'yes' && shortageAddsToGCI)
-        ? (Number(form.getValues('shortageAmount')) || 0)
-        : 0;
-      // Add tx compliance fee if buyer is paying directly or through seller closing cost
-      const txFeeAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
-        form.getValues('txComplianceFeePaidBy') || ''
-      );
-      const txFeeAdd = (form.getValues('txComplianceFee') === 'yes' && txFeeAddsToGCI)
-        ? (Number(form.getValues('txComplianceFeeAmount')) || 0)
-        : 0;
-      // Add warranty if buyer is paying directly or through seller closing cost
-      const warrantyAddsToGCI = ['buyer', 'seller_closing_cost'].includes(
-        form.getValues('warrantyPaidBy') || ''
-      );
-      const warrantyAdd = (form.getValues('warrantyAtClosing') === 'yes' && warrantyAddsToGCI)
-        ? (Number(form.getValues('warrantyAmount')) || 0)
-        : 0;
-      // If agent absorbs warranty → deduct from GCI BEFORE split (reduces the base the split is calculated on)
-      const warrantyAgentAbsorbs = form.getValues('warrantyAtClosing') === 'yes' && form.getValues('warrantyPaidBy') === 'agent';
-      const warrantyDeductFromGCI = warrantyAgentAbsorbs ? (Number(form.getValues('warrantyAmount')) || 0) : 0;
-      const calcGCI = baseGCI + shortageAdd + txFeeAdd + warrantyAdd - warrantyDeductFromGCI;
+      // A transaction/compliance fee is never commission revenue. It must not
+      // increase GCI, affect tier lookup, or be included in an internal split.
+      // It is handled separately as an agent take-home deduction only when the
+      // agent is the selected fee payer.
+      const calcGCI = calculatePercentageGrossCommission({
+        baseCommission: baseGCI,
+        shortageInCommission,
+        shortageHandledBy,
+        shortageAmount,
+        warrantyAtClosing,
+        warrantyPaidBy,
+        warrantyAmount,
+      });
       form.setValue('gci', calcGCI as any);
     }
-  }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, txComplianceFee, txComplianceFeeAmount, txComplianceFeePaidBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy]);
+  }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy]);
 
   // Commercial lease auto-calc: monthly × 12 × term = total lease value; then GCI
   useEffect(() => {

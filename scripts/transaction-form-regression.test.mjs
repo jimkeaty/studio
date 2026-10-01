@@ -106,6 +106,18 @@ test('an explicit No clears a transaction fee and cannot be re-enabled by stale 
   assert.match(agentRouteSource, /updates\.txComplianceFee = 'no';[\s\S]*updates\.txComplianceFeeAmount = 0/);
 });
 
+test('transaction compliance fees are excluded from gross commission and commission splits regardless of payer', () => {
+  const grossCommissionPolicy = readFileSync(resolve(root, 'src/lib/transactions/percentageGrossCommission.ts'), 'utf8');
+  const trainingArticles = readFileSync(resolve(root, 'src/lib/training/articles.ts'), 'utf8');
+  assert.match(formSource, /import \{ calculatePercentageGrossCommission \} from '@\/lib\/transactions\/percentageGrossCommission';/);
+  assert.match(formSource, /const calcGCI = calculatePercentageGrossCommission\(\{/);
+  assert.doesNotMatch(formSource, /const txFeeAdd =/);
+  assert.doesNotMatch(formSource, /txFeeAddsToGCI/);
+  assert.match(grossCommissionPolicy, /Transaction compliance fees are intentionally absent from these inputs/);
+  assert.doesNotMatch(grossCommissionPolicy, /txComplianceFeeAmount/);
+  assert.match(trainingArticles, /Transaction Fee:<\/strong> Never GCI and never part of the agent\/broker split/);
+});
+
 test('broker configuration exposes separate buyer and listing defaults', () => {
   assert.match(brokerFeeSettingsSource, /const FALLBACKS = \{ buyerDefault: 395, listingDefault: 150 \}/);
   assert.match(formSource, /watchedClosingType === 'listing' \|\| watchedClosingType === 'dual'/);

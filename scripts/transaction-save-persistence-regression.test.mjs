@@ -6,6 +6,7 @@ const read = (relativePath) => readFileSync(new URL(`../${relativePath}`, import
 
 const versionHelper = read('src/lib/transactions/transactionVersion.ts');
 const adminRoute = read('src/app/api/admin/transactions/route.ts');
+const agentTransactionRoute = read('src/app/api/agent/transactions/[txId]/route.ts');
 const staffQueueRoute = read('src/app/api/admin/staff-queue/[itemId]/route.ts');
 const tcRoute = read('src/app/api/admin/tc/[id]/route.ts');
 const transactionForm = read('src/app/dashboard/transactions/new/page.tsx');
@@ -54,6 +55,11 @@ test('Task 9: the unified edit form persists its loaded version and shows a refr
   assert.match(transactionForm, /expectedUpdatedAt: transactionVersionRef\.current/);
   assert.match(transactionForm, /Transaction changed — refresh required/);
   assert.match(transactionForm, /transactionVersionRef\.current = normalizeTransactionVersion\(data\.transaction\?\.updatedAt\)/);
+});
+
+test('transaction load responses serialize legacy date versions before an editor can save', () => {
+  assert.match(agentTransactionRoute, /updatedAt: normalizeTransactionVersion\(data\.updatedAt\) \|\| null/);
+  assert.match(adminRoute, /if \(val instanceof Date\) return val\.toISOString\(\);/);
 });
 
 test('Task 9: direct Admin Ledger transfer and quick-status saves include the loaded version', () => {
