@@ -1,0 +1,30 @@
+{
+  "manifestId": "2026-definite-transaction-fee-gci-correction-v1",
+  "approval": {
+    "date": "2026-10-01",
+    "scope": "Two definite 2026 fee-in-GCI records only",
+    "explicitUserAuthorization": true
+  },
+  "corrections": [
+    {
+      "id": "JpTYOQ5WcUoS0D96uY4o",
+      "address": "101 Perry Oak Drive",
+      "expectedUpdatedAt": "2026-03-28T17:18:31.175Z",
+      "grossCommissionBefore": 9392,
+      "grossCommissionAfter": 8997,
+      "transactionFee": 395,
+      "agentNetCommissionPreserved": 7197.6,
+      "companyRetainedPreserved": 1799.4
+    },
+    {
+      "id": "jd4NBEj0jKzYYsoj9BGN",
+      "address": "612 Gerald Drive",
+      "expectedUpdatedAt": "2026-03-28T17:18:31.175Z",
+      "grossCommissionBefore": 5345,
+      "grossCommissionAfter": 4950,
+      "transactionFee": 395,
+      "agentNetCommissionPreserved": 3960,
+      "companyRetainedPreserved": 990
+    }
+  ]
+}
