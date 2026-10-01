@@ -42,6 +42,10 @@ The current production snapshot was read-only audited before this correction wor
 4. Corrected the in-app Commission Calculation training article, including examples that previously treated a buyer-paid or seller-pool transaction fee as GCI.
 5. Fixed transaction read serialization so legacy JavaScript-Date `updatedAt` values become ISO version tokens. This allows the unified editor to retain its required Firestore write precondition instead of making an unversioned correction.
 
+### Deployment hotfix
+
+The first deployed version of this release exposed a missing import for `normalizeTransactionVersion` in the editor-load route. The full production build completed, but the authenticated production readback correctly caught the runtime failure before any transaction data was changed. The import was restored, protected by a regression assertion, rebuilt successfully, and released as an immediate follow-up hotfix.
+
 ## Regression coverage
 
 - Extended commission-base behavior tests with the Critter Creek transaction-fee case: $2,325 stays $2,325 even if a $150 buyer-paid fee is present.

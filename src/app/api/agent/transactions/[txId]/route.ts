@@ -13,7 +13,7 @@ import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllo
 import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
-import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
+import { hasTransactionVersionConflict, normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 
 function jsonError(status: number, error: string) {
