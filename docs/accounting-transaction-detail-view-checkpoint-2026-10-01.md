@@ -60,6 +60,8 @@ The Accounting detail now makes the transaction-fee payer unambiguous and shows 
 
 The view calls the canonical `getAgentTakeHome` policy helper rather than introducing a second commission calculation. It is read-only and does not alter GCI, saved split snapshots, transaction data, or rollups.
 
+For co-agent transactions, the Accounting display now first uses the canonical saved primary participant net payout, which already reflects the approved primary/co-agent fee allocation. This prevents a shared agent-paid fee from being shown as deducted twice. Regression coverage verifies both a normal agent-paid fee deduction and a preallocated co-agent fee split.
+
 ## Data and deployment boundary
 
 - No production transaction, accounting workflow record, payout, status, or notification preference was changed.

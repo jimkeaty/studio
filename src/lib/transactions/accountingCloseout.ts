@@ -256,9 +256,16 @@ export function buildAccountingSnapshot(transaction: Record<string, any>, transa
   const agentNet = isPassThrough
     ? Math.max(0, Math.round((grossGci - referralDollar) * 100) / 100)
     : firstMoney(split.agentNetCommission, transaction.agentDollar, transaction.agentNetCommission, transaction.netCommission);
+  // Co-agent synchronization stores each participant's final net commission after
+  // the approved fee allocation. Use that canonical saved value as-is so the
+  // Accounting read-only display never deducts the shared fee a second time.
+  const savedPrimaryParticipantNet = firstMoney(
+    transaction.participantAllocations?.primary?.netCommission,
+    transaction.coAgent && transaction.txComplianceFeePaidBy === 'agent' ? agentNet : null,
+  );
   const agentTakeHome = isPassThrough
     ? agentNet
-    : getAgentTakeHome(transaction);
+    : savedPrimaryParticipantNet ?? getAgentTakeHome(transaction);
   const brokerPercent = isPassThrough
     ? 0
     : firstPositivePercent(split.companySplitPercent, transaction.brokerPct)

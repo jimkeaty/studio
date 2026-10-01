@@ -137,6 +137,25 @@ test('Accounting shows an agent-paid transaction fee as a take-home deduction', 
   assert.equal(fields.get('agentTakeHome')?.value, 5005);
 });
 
+test('Accounting preserves a co-agent primary payout already reduced by its saved fee allocation', () => {
+  const fields = fieldMap({
+    status: 'closed',
+    txComplianceFee: 'yes',
+    txComplianceFeeAmount: 395,
+    txComplianceFeePaidBy: 'agent',
+    txComplianceFeePrimaryAgentAmount: 197.5,
+    agentDollar: 5202.5,
+    coAgent: { agentId: 'co-agent-001' },
+    participantAllocations: {
+      primary: { netCommission: 5202.5, transactionFeeDeduction: 197.5 },
+    },
+    splitSnapshot: { agentNetCommission: 5202.5 },
+  });
+
+  assert.equal(fields.get('agentNet')?.value, 5202.5);
+  assert.equal(fields.get('agentTakeHome')?.value, 5202.5);
+});
+
 test('Accounting labels seller closing-cost fees without deducting the agent take-home', () => {
   const fields = fieldMap({
     status: 'closed',
