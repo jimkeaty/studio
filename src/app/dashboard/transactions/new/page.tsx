@@ -31,7 +31,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ContactAutocomplete } from '@/components/contacts/ContactAutocomplete';
 import type { SavedContact } from '@/hooks/useContactSearch';
 import Link from 'next/link';
-import { resolveGCI } from '@/lib/commissions';
+import { resolveCommissionBase, resolveGCI } from '@/lib/commissions';
 import { CANONICAL_SOURCES, normalizeDealSource } from '@/lib/normalizeDealSource';
 import { AgentDocumentChecklist } from '@/components/transactions/AgentDocumentChecklist';
 import { InspectionReviewPanel } from '@/components/transactions/InspectionReviewPanel';
@@ -4308,17 +4308,31 @@ export default function AddTransactionPage() {
               const cooperatingOffer = watchedCooperatingCommissionMethod === 'flat_dollar'
                 ? `$${(Number(watchedCooperatingCommissionFlatAmount) || 0).toLocaleString('en-US')}`
                 : `${Number(watchedCooperatingCommissionPercent) || 0}%`;
-              const lp = Number(watchedListPrice) || 0;
-              const estimatedGci = commissionMode === 'flat'
+              // Keep this summary on the exact same status-aware base as the persisted
+              // commission calculation. A closed/pending listing must never continue
+              // to show its earlier list-price estimate after the sale price is known.
+              const listingCommissionBase = resolveCommissionBase({
+                commissionBasePrice: Number(watchedCBP) || null,
+                salePrice: Number(watchedSalePrice) || null,
+                listPrice: Number(watchedListPrice) || null,
+                status: watchedStatus,
+              });
+              const isEstimatedListingCommission = commissionMode !== 'flat' &&
+                Number(watchedCBP) <= 0 &&
+                Number(watchedSalePrice) <= 0 &&
+                ['active', 'coming_soon', 'temp_off_market'].includes(String(watchedStatus || ''));
+              const listingCommission = commissionMode === 'flat'
                 ? (Number(watchedSellerPayingListing) || null)
-                : lp > 0 && listingPct > 0 ? Math.round(lp * listingPct / 100) : null;
+                : listingCommissionBase > 0 && listingPct > 0
+                  ? Math.round(listingCommissionBase * listingPct / 100)
+                  : null;
               return (
                 <div className="space-y-4 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-950/20 p-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-green-800 dark:text-green-300">Listing Commission</p>
-                    {estimatedGci !== null && (
+                    {listingCommission !== null && (
                       <span className="text-sm font-bold text-green-700 dark:text-green-400">
-                        Est. GCI: ${estimatedGci.toLocaleString('en-US')}
+                        {isEstimatedListingCommission ? 'Est. Listing Commission' : 'Listing-side Commission'}: ${listingCommission.toLocaleString('en-US')}
                       </span>
                     )}
                   </div>
@@ -4372,12 +4386,16 @@ export default function AddTransactionPage() {
                   {listingPct > 0 && (
                     <div className="flex items-center gap-6 text-sm text-green-700 dark:text-green-400">
                       <span>Listing-side commission: <strong>{listingPct}%</strong></span>
-                      {lp > 0 && <span>= <strong>${Math.round(lp * listingPct / 100).toLocaleString('en-US')}</strong> estimated GCI</span>}
+                      {listingCommissionBase > 0 && listingCommission !== null && (
+                        <span>= <strong>${listingCommission.toLocaleString('en-US')}</strong> {isEstimatedListingCommission ? 'estimated from list price' : `from $${listingCommissionBase.toLocaleString('en-US')} commission base`}</span>
+                      )}
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground">Cooperating-agent offer: <strong>{cooperatingOffer}</strong> — recorded separately and excluded from the listing-side GCI above.</p>
                   <p className="text-xs text-muted-foreground">
-                    Estimated based on list price — will be recalculated at closing.
+                    {isEstimatedListingCommission
+                      ? 'Estimated from list price until a sale price or commission base is entered.'
+                      : 'Based on the saved commission base (sale price less seller concessions, when applicable).'}
                   </p>
                 </div>
               );

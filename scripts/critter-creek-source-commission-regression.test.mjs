@@ -38,3 +38,16 @@ test('operational manual percentage edits synchronize the complementary split in
   assert.match(editor, /setManualDollarSplit\('brokerGci'/);
   assert.match(editor, /setManualDollarSplit\('agentDollar'/);
 });
+
+test('listing commission summary uses the canonical sale-price-aware commission base', () => {
+  const editor = read('src/app/dashboard/transactions/new/page.tsx');
+  assert.match(editor, /import \{ resolveCommissionBase, resolveGCI \} from '@\/lib\/commissions';/);
+  assert.match(editor, /const listingCommissionBase = resolveCommissionBase\(\{/);
+  assert.match(editor, /commissionBasePrice: Number\(watchedCBP\) \|\| null/);
+  assert.match(editor, /salePrice: Number\(watchedSalePrice\) \|\| null/);
+  assert.match(editor, /listPrice: Number\(watchedListPrice\) \|\| null/);
+  assert.match(editor, /status: watchedStatus/);
+  assert.match(editor, /Listing-side Commission/);
+  assert.match(editor, /from \$\$\{listingCommissionBase\.toLocaleString\('en-US'\)\} commission base/);
+  assert.doesNotMatch(editor, /lp \* listingPct/);
+});
