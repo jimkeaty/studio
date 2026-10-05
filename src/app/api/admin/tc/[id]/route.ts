@@ -812,6 +812,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       });
       const rawAgentDollar = intake.agentDollar ? toNum(intake.agentDollar) : null;
       const rawBrokerGci = intake.brokerGci ? toNum(intake.brokerGci) : null;
+      // Resolve once for every approval, including ordinary files with no referral.
+      // The transaction payload below always serializes referral fields, so keeping
+      // this outside the automatic-calculation branch prevents a no-referral file
+      // from referencing a block-scoped value during approval.
+      const referral = resolveOutboundReferral(intake, rawGci);
 
       let splitSnapshot: Record<string, any>;
       let creditSnapshot: Record<string, any>;
@@ -867,7 +872,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // We deduct it first, then split the remaining net between primary and co-agent.
         // The co-agent refresh below stores a per-participant gross/referral
         // snapshot. These preliminary net shares avoid a temporary double deduction.
-        const referral = resolveOutboundReferral(intake, commission);
         // Net GCI available for agent/broker splits after referral is paid out
         const netAfterReferral = referral.netAfterReferral;
 
