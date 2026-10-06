@@ -10,6 +10,7 @@ import { getTcUids, getStaffUidsForAgent, getAllStaffUids } from '@/lib/notifica
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
     if (!VALID_DEAL_TYPES.has(dealType)) {
       return jsonError(400, 'invalid dealType');
     }
+    const coAgentSplit = validateCoAgentSplit(body);
+    if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
 
     // Agent info
     let agentId = toStr(body.agentId) || uid;
@@ -365,23 +368,23 @@ export async function POST(req: NextRequest) {
       showingCallOrder3Notify: toArr(body.showingCallOrder3Notify),
 
       // Co-agent
-      hasCoAgent: toBool(body.hasCoAgent),
-      ...(body.hasCoAgent && toStr(body.coAgentId) ? {
+      hasCoAgent: coAgentSplit.active,
+      ...(coAgentSplit.active && toStr(body.coAgentId) ? {
         coAgent: {
           agentId: toStr(body.coAgentId),
           agentDisplayName: toStr(body.coAgentDisplayName) || toStr(body.coAgentId),
           role: toStr(body.coAgentRole) || 'other',
-          splitPercent: toNum(body.coAgentSplitPercent) ?? 50,
-          coAgentSplitPct: toNum(body.coAgentSplitPercent) ?? 50,
-          primarySplitPct: toNum(body.primaryAgentSplitPercent) ?? 50,
+          splitPercent: coAgentSplit.coAgentPercent ?? 50,
+          coAgentSplitPct: coAgentSplit.coAgentPercent ?? 50,
+          primarySplitPct: coAgentSplit.primaryPercent ?? 50,
         },
         coAgentId: toStr(body.coAgentId),
         coAgentDisplayName: toStr(body.coAgentDisplayName) || null,
         coAgentRole: toStr(body.coAgentRole) || 'other',
-        primaryAgentSplitPercent: toNum(body.primaryAgentSplitPercent) ?? 50,
-        coAgentSplitPercent: toNum(body.coAgentSplitPercent) ?? 50,
-        coAgentSplitPct: toNum(body.coAgentSplitPercent) ?? 50,
-        primarySplitPct: toNum(body.primaryAgentSplitPercent) ?? 50,
+        primaryAgentSplitPercent: coAgentSplit.primaryPercent ?? 50,
+        coAgentSplitPercent: coAgentSplit.coAgentPercent ?? 50,
+        coAgentSplitPct: coAgentSplit.coAgentPercent ?? 50,
+        primarySplitPct: coAgentSplit.primaryPercent ?? 50,
       } : {}),
 
       // Outbound referral

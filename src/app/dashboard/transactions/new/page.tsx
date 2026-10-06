@@ -42,6 +42,7 @@ import { SmartPropertyTransactionPanel } from '@/components/transactions/SmartPr
 import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 import { optionalSelect, optionalStringArray } from '@/lib/transactions/optionalFormValues';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -635,12 +636,9 @@ const schema = z.object({
   { message: 'Full property address is required for buyer, listing, and dual transactions.', path: ['address'] }
 ).refine(
   (data) => {
-    if (!data.hasCoAgent) return true;
-    const p = Number(data.primaryAgentSplitPercent || 0);
-    const c = Number(data.coAgentSplitPercent || 0);
-    return Math.abs(p + c - 100) < 0.01;
+    return validateCoAgentSplit(data).valid;
   },
-  { message: 'Primary and co-agent split percentages must total 100%', path: ['coAgentSplitPercent'] }
+  { message: 'Primary and co-agent split percentages must be valid values from 0 to 100 and total 100%.', path: ['coAgentSplitPercent'] }
 ).refine(
   (data) => {
     if (data.isPassThrough) return true;
@@ -1624,8 +1622,13 @@ export default function AddTransactionPage() {
 
   // Co-agent watched values
   const hasCoAgent = form.watch('hasCoAgent');
-  const watchedPrimaryPct = Number(form.watch('primaryAgentSplitPercent') || 0);
-  const watchedCoPct = Number(form.watch('coAgentSplitPercent') || 0);
+  const watchedCoAgentSplit = validateCoAgentSplit({
+    hasCoAgent,
+    primaryAgentSplitPercent: form.watch('primaryAgentSplitPercent'),
+    coAgentSplitPercent: form.watch('coAgentSplitPercent'),
+  });
+  const watchedPrimaryPct = watchedCoAgentSplit.primaryPercent ?? 0;
+  const watchedCoPct = watchedCoAgentSplit.coAgentPercent ?? 0;
   const splitTotal = watchedPrimaryPct + watchedCoPct;
 
   const primaryAgentFeeShare = (() => {
@@ -3254,6 +3257,7 @@ export default function AddTransactionPage() {
         // older transactions are still in circulation. This prevents a status-only
         // save from erasing or hiding a co-agent relationship created under the
         // former coListingAgent* schema.
+        const validatedCoAgentSplit = validateCoAgentSplit(values);
         const coAgentCompatibility = values.hasCoAgent
           ? {
               hasCoAgent: true,
@@ -3262,12 +3266,12 @@ export default function AddTransactionPage() {
                 agentName: values.coAgentDisplayName || '',
                 displayName: values.coAgentDisplayName || '',
                 role: values.coAgentRole || 'co_list',
-                splitPercent: Number(values.coAgentSplitPercent || 50),
-                primarySplitPercent: Number(values.primaryAgentSplitPercent || 50),
+                splitPercent: validatedCoAgentSplit.coAgentPercent ?? 50,
+                primarySplitPercent: validatedCoAgentSplit.primaryPercent ?? 50,
               },
               isCoListing: true,
               coListingAgentName: values.coAgentDisplayName || '',
-              coListingAgentSplit: Number(values.coAgentSplitPercent || 50),
+              coListingAgentSplit: validatedCoAgentSplit.coAgentPercent ?? 50,
             }
           : {
               hasCoAgent: false,

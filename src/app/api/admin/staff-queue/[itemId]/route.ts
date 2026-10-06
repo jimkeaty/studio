@@ -16,6 +16,7 @@ import { buildChecklistTransactionActivity } from '@/lib/notifications/transacti
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import {
   DIRECT_SPLIT_FIELDS,
   mergeOperationalDirectSplit,
@@ -414,6 +415,12 @@ export async function PATCH(
         if (hasDirectSplitChange && !isPassThrough) mergeOperationalDirectSplit(currentTx, allowed);
         enforcePassThroughFinancialPolicy(currentTx, allowed);
         const allocationSource = { ...currentTx, ...allowed };
+        const coAgentSplit = validateCoAgentSplit(allocationSource);
+        if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
+        if (coAgentSplit.active) {
+          allowed.primaryAgentSplitPercent = coAgentSplit.primaryPercent;
+          allowed.coAgentSplitPercent = coAgentSplit.coAgentPercent;
+        }
         if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
           try {
             Object.assign(allowed, await buildCoAgentAllocationUpdate(adminDb, allocationSource));

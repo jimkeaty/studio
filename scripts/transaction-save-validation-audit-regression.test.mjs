@@ -56,8 +56,9 @@ test('all optional select families accept blank values and cannot block a Pendin
 });
 
 test('conditional financial and co-agent rules apply only when the user elects those workflows', () => {
-  assert.match(form, /if \(!data\.hasCoAgent\) return true/);
-  assert.match(form, /Primary and co-agent split percentages must total 100%/);
+  assert.match(form, /import \{ validateCoAgentSplit \} from '@\/lib\/transactions\/coAgentSplitValidation';/);
+  assert.match(form, /return validateCoAgentSplit\(data\)\.valid;/);
+  assert.match(form, /Primary and co-agent split percentages must be valid values from 0 to 100 and total 100%\./);
   assert.match(adminRoute, /body\.validateManualPercentageSplit === true/);
   assert.match(adminRoute, /Broker % and Agent % must both be provided and total 100%, or clear both values for a manual dollar override/);
   assert.match(adminRoute, /Exact gross commission must be a valid non-negative dollar amount/);

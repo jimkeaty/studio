@@ -12,6 +12,7 @@ import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUi
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { buildChecklistTransactionActivity } from '@/lib/notifications/transactionActivity';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import {
@@ -479,6 +480,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           }
         }
       synchronizeOperationalCloseDate(updates);
+      const intakeCoAgentSplit = validateCoAgentSplit({ ...intake, ...updates });
+      if (!intakeCoAgentSplit.valid) return jsonError(400, intakeCoAgentSplit.error || 'Invalid co-agent split');
+      if (intakeCoAgentSplit.active) {
+        updates.primaryAgentSplitPercent = intakeCoAgentSplit.primaryPercent;
+        updates.coAgentSplitPercent = intakeCoAgentSplit.coAgentPercent;
+      }
       await docRef.update(updates);
 
       // ── Sync edits to the linked transactions doc so the agent sees them immediately ──
@@ -658,6 +665,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           Object.assign(txSyncUpdate, cooperatingCommission.updates);
           enforcePassThroughFinancialPolicy(versionedTransactionSnap.data() || {}, txSyncUpdate);
           const allocationSource = { ...(versionedTransactionSnap.data() || {}), ...txSyncUpdate };
+          const coAgentSplit = validateCoAgentSplit(allocationSource);
+          if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
+          if (coAgentSplit.active) {
+            txSyncUpdate.primaryAgentSplitPercent = coAgentSplit.primaryPercent;
+            txSyncUpdate.coAgentSplitPercent = coAgentSplit.coAgentPercent;
+          }
           if (allocationSource.hasCoAgent && allocationSource.coAgent?.agentId) {
             Object.assign(txSyncUpdate, await buildCoAgentAllocationUpdate(adminDb, allocationSource));
           }
@@ -729,6 +742,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (intake.status === 'approved' && intake.approvedTransactionId) {
         return jsonError(400, 'Intake is already approved');
       }
+      const intakeCoAgentSplit = validateCoAgentSplit(intake);
+      if (!intakeCoAgentSplit.valid) return jsonError(400, intakeCoAgentSplit.error || 'Invalid co-agent split');
 
       let agentId = String(intake.agentId || '').trim();
       const agentDisplayName = String(intake.agentDisplayName || '').trim();
@@ -876,11 +891,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const netAfterReferral = referral.netAfterReferral;
 
         // If co-agent is present, split the POST-REFERRAL net between primary and co-agent
-        const hasCoAgent = !!intake.hasCoAgent;
+        const hasCoAgent = intakeCoAgentSplit.active;
         const coAgentId = hasCoAgent ? String(intake.coAgentId || '').trim() : '';
         const coAgentDisplayName = hasCoAgent ? String(intake.coAgentDisplayName || '').trim() : '';
-        const primarySplitPct = hasCoAgent ? toNum(intake.primaryAgentSplitPercent ?? 50) : 100;
-        const coSplitPct = hasCoAgent ? toNum(intake.coAgentSplitPercent ?? 50) : 0;
+        const primarySplitPct = hasCoAgent ? (intakeCoAgentSplit.primaryPercent ?? 50) : 100;
+        const coSplitPct = hasCoAgent ? (intakeCoAgentSplit.coAgentPercent ?? 50) : 0;
         // Shares are based on netAfterReferral, NOT gross commission
         const primaryShare = hasCoAgent && coAgentId
           ? Number((netAfterReferral * (primarySplitPct / 100)).toFixed(2))

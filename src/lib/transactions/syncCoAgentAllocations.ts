@@ -6,6 +6,7 @@ import {
   allocateOutboundReferralAcrossCoAgents,
   resolveOutboundReferral,
 } from '@/lib/transactions/outboundReferral';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 
 type AnyRecord = Record<string, any>;
 
@@ -14,32 +15,21 @@ function money(value: unknown): number {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
-function clampPercent(value: unknown, fallback: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > 100) return fallback;
-  return n;
-}
-
 /**
  * Builds the accounting allocation stored on one shared transaction document.
  * It deliberately never creates or deletes transaction documents.
  */
 export async function buildCoAgentAllocationUpdate(
-  db: Firestore,
+  db: FirebaseFirestore.Firestore,
   transaction: AnyRecord,
-): Promise<AnyRecord> {
+): Promise<Record<string, any>> {
   const coAgent = transaction.coAgent as AnyRecord | null | undefined;
   const coAgentId = String(coAgent?.agentId || transaction.coAgentId || '').trim();
-  if (!transaction.hasCoAgent || !coAgentId) return {};
-
-  const coPercent = clampPercent(
-    transaction.coAgentSplitPercent ?? coAgent?.splitPercent ?? transaction.coListingAgentSplit,
-    50,
-  );
-  const primaryPercent = clampPercent(
-    transaction.primaryAgentSplitPercent ?? coAgent?.primarySplitPercent,
-    100 - coPercent,
-  );
+  const coAgentSplit = validateCoAgentSplit(transaction);
+  if (!coAgentSplit.active || !coAgentId) return {};
+  if (!coAgentSplit.valid) throw new Error(coAgentSplit.error || 'Invalid co-agent split');
+  const coPercent = coAgentSplit.coAgentPercent ?? 50;
+  const primaryPercent = coAgentSplit.primaryPercent ?? 50;
   const totalGci = money(transaction.gci ?? transaction.commission);
   const salePrice = money(transaction.salePrice ?? transaction.listPrice);
   // This is a separate pass-through amount. It must never be folded into GCI,

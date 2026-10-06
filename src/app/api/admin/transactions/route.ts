@@ -22,6 +22,7 @@ import {
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -540,6 +541,12 @@ export async function PATCH(req: NextRequest) {
     if (!existingSnap.exists) return jsonError(404, 'Transaction not found');
     if (hasTransactionVersionConflict(existingData?.updatedAt, expectedUpdatedAt)) {
       return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
+    }
+    const coAgentSplit = validateCoAgentSplit({ ...existingData, ...updates });
+    if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
+    if (coAgentSplit.active) {
+      updates.primaryAgentSplitPercent = coAgentSplit.primaryPercent;
+      updates.coAgentSplitPercent = coAgentSplit.coAgentPercent;
     }
     // A selected exact-dollar method is authoritative for gross commission.
     // Keep the legacy `gci` and the split snapshot's gross amount aligned so

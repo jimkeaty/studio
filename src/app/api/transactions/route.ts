@@ -6,6 +6,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess'
 import { normalizeDealSource } from '@/lib/normalizeDealSource'
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations'
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral'
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -69,6 +70,8 @@ export async function POST(req: NextRequest) {
     if (!ALLOWED_TYPES.has(transactionType)) return jsonError(400, 'invalid transactionType')
     if (!address) return jsonError(400, 'address required')
     if (!ALLOWED_SOURCES.has(source)) return jsonError(400, 'invalid source')
+    const coAgentSplit = validateCoAgentSplit(body)
+    if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split')
 
     const year = toYearFromDates(closedDate, contractDate)
     const now = new Date()
@@ -145,17 +148,17 @@ export async function POST(req: NextRequest) {
     // If a co-agent is present, the side gross commission is split first by
     // the agreed percentages, then each agent's own commission structure is
     // applied independently to their respective share.
-    const hasCoAgent = !!body.hasCoAgent
+    const hasCoAgent = coAgentSplit.active
     let coAgentData: Record<string, any> | null = null
 
     if (hasCoAgent) {
       const coAgentId = String(body.coAgentId || '').trim()
       const coAgentDisplayName = String(body.coAgentDisplayName || '').trim()
       const coAgentRole = String(body.coAgentRole || 'other').trim()
-      const primarySplitPct = toNumber(body.primaryAgentSplitPercent)
-      const coSplitPct = toNumber(body.coAgentSplitPercent)
+      const primarySplitPct = coAgentSplit.primaryPercent ?? 50
+      const coSplitPct = coAgentSplit.coAgentPercent ?? 50
 
-      if (coAgentId && coAgentDisplayName && primarySplitPct + coSplitPct === 100) {
+      if (coAgentId && coAgentDisplayName) {
         // Step 1: Deduct outbound referral fee OFF THE TOP before splitting between agents.
         // The referral fee is paid to an outside broker/relocation company from total GCI.
         // All agent/broker splits are calculated on the net-after-referral amount.
@@ -280,8 +283,9 @@ export async function POST(req: NextRequest) {
       // Co-agent fields
       hasCoAgent,
       ...(hasCoAgent && coAgentData ? {
-        primaryAgentSplitPercent: toNumber(body.primaryAgentSplitPercent),
-        primaryAgentSideCredit: toNumber(body.primaryAgentSplitPercent) / 100,
+        primaryAgentSplitPercent: coAgentSplit.primaryPercent ?? 50,
+        coAgentSplitPercent: coAgentSplit.coAgentPercent ?? 50,
+        primaryAgentSideCredit: (coAgentSplit.primaryPercent ?? 50) / 100,
         coAgent: coAgentData,
       } : {}),
 

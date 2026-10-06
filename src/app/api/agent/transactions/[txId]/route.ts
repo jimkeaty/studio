@@ -11,6 +11,7 @@ import { resolveGCI } from '@/lib/commissions';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
+import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
@@ -308,6 +309,12 @@ export async function PATCH(
       if (AGENT_ALLOWED_FIELDS.has(k)) {
         updates[k] = v;
       }
+    }
+    const coAgentSplit = validateCoAgentSplit({ ...txData, ...updates });
+    if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
+    if (coAgentSplit.active) {
+      updates.primaryAgentSplitPercent = coAgentSplit.primaryPercent;
+      updates.coAgentSplitPercent = coAgentSplit.coAgentPercent;
     }
     const cooperatingCommission = buildCooperatingCommissionUpdate({
       current: txData,
