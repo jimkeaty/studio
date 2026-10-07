@@ -36,6 +36,10 @@ export const OPERATIONAL_TRANSACTION_FORM_FIELDS = [
   'coListingAgentPhone', 'coListingAgentSplit', 'coAgent',
   'outboundReferral', 'outboundReferralEmail', 'outboundReferralPhone',
   'inboundReferral', 'inboundReferralBrokerage', 'inboundReferralEmail', 'inboundReferralPhone',
+  // Referral-income workflow: an earned referral fee paid to Keaty, distinct
+  // from an outbound referral paid from another transaction's GCI.
+  'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee',
+  'referralActualFeeReceived', 'referralFeeReceivedDate',
   'buyerWarrantyEducationRequested', 'sellerWarrantyEducationRequested',
   'inspectionRowData',
   'stagingConsultRequested', 'stagingServiceType', 'stagingConsultationDate',

@@ -20,12 +20,21 @@ function isDual(tx: TransactionLike): boolean {
   return String(tx.closingType || '').trim().toLowerCase() === 'dual';
 }
 
+function isReferralIncome(tx: TransactionLike): boolean {
+  return String(tx.closingType || '').trim().toLowerCase() === 'referral';
+}
+
 /**
  * Total production credit for the whole transaction, used by broker-level
  * reporting. A dual transaction has a listing side and a buyer side, so its
  * total sales-side and volume credit is two times its sale price.
  */
 export function getTotalSideMultiplier(tx: TransactionLike): number {
+  // Referral-income files represent a fee received by Keaty, not a property
+  // side represented by the agent. They intentionally have zero sides and
+  // zero production volume while their received GCI remains eligible for the
+  // normal company split and tier calculation.
+  if (isReferralIncome(tx)) return 0;
   return isDual(tx) ? 2 : 1;
 }
 

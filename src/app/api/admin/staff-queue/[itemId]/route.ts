@@ -24,6 +24,7 @@ import {
   synchronizeOperationalCloseDate,
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
+import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -131,6 +132,7 @@ const EDITABLE_TX_FIELDS = new Set([
 const COMMISSION_TRIGGER_FIELDS = new Set([
   'salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource',
   'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralDollar',
+  'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee', 'referralActualFeeReceived', 'referralFeeReceivedDate',
 ]);
 // Fields that directly set split values — when ONLY these change (no GCI change),
 // merge them straight into splitSnapshot instead of running a profile recalculation.
@@ -320,6 +322,7 @@ export async function PATCH(
 
       if (Object.keys(allowed).length > 0) {
         synchronizeOperationalCloseDate(allowed);
+        Object.assign(allowed, applyReferralIncomeFinancials(currentTx, allowed));
         allowed.updatedAt = now;
         const cooperatingCommission = buildCooperatingCommissionUpdate({
           current: currentTx,

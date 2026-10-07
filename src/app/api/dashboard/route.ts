@@ -143,7 +143,8 @@ function getTransactionNet(t: any): number {
 }
 
 function getTransactionDateForEarned(t: any): Date | null {
-  return toDate(t?.closedDate || t?.closingDate || null);
+  const isReferralIncome = String(t?.closingType || '').trim().toLowerCase() === 'referral';
+  return toDate((isReferralIncome ? t?.referralFeeReceivedDate : null) || t?.closedDate || t?.closingDate || null);
 }
 
 function getTransactionDateForPending(t: any): Date | null {
@@ -496,8 +497,8 @@ export async function GET(req: NextRequest) {
       const net = isCoAgentView ? asNumber(participantSnapshot?.agentNetCommission ?? t.commission) : getTransactionNet(t);
       const dealValue = asNumber(t.salePrice ?? t.listPrice);
       const gci = asNumber(participantSnapshot?.grossCommission || t.commission);
-      // Referral closings (closingType='referral') count toward net income but NOT
-      // toward volume, unit count, or GCI — same treatment as broker recruiting incentives.
+      // Referral income has no represented property-side volume or sides, but its
+      // received fee is normal split GCI for income and company reporting.
       const closingType = String((t as any).closingType || "").toLowerCase();
       const isReferralClosing = closingType === "referral";
       const isPassThrough = isPassThroughTransaction(t);
@@ -522,8 +523,8 @@ export async function GET(req: NextRequest) {
           if (!isReferralClosing) {
             closedUnits += sideCount;
             closedVolume += productionVolume;
-            if (!isPassThrough) totalGCI += gci;
           }
+          if (!isPassThrough) totalGCI += gci;
           // grossGCIYTD is accumulated below using anniversary cycle filter
         }
       } else if (status === "pending" || status === "under_contract") {
@@ -567,12 +568,12 @@ export async function GET(req: NextRequest) {
           if (!isReferralClosing) {
             pendingUnits += productionCredit.pendingSides;
             pendingVolume += productionVolume;
-            if (!isPassThrough) {
-              pendingGrossGCI += asNumber(
-                t.splitSnapshot?.grossCommission
-                || t.commission
-              );
-            }
+          }
+          if (!isPassThrough) {
+            pendingGrossGCI += asNumber(
+              t.splitSnapshot?.grossCommission
+              || t.commission
+            );
           }
         }
       }
@@ -1269,9 +1270,9 @@ export async function GET(req: NextRequest) {
         if (!prevIsPassThrough) prevNetEarned += getTransactionNet(t);
         if (!prevIsReferral) {
           prevClosedVolume += asNumber(t.salePrice ?? t.listPrice);
-          if (!prevIsPassThrough) prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
           prevClosedUnits += 1;
         }
+        if (!prevIsPassThrough) prevTotalGCI += asNumber(t.splitSnapshot?.grossCommission || t.commission);
       }
 
       let prevEngagements = 0;

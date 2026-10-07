@@ -17,6 +17,7 @@ import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSid
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict, normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
+import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -81,6 +82,9 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'hasInboundReferral', 'inboundReferral', 'inboundReferralAgentName', 'inboundReferralBrokerage',
   'inboundReferralFeePercent', 'inboundReferralFee', 'inboundReferralEmail', 'inboundReferralPhone',
   'outboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage', 'outboundReferralEmail', 'outboundReferralPhone',
+  // Referral-income workflow (the fee Keaty receives for this agent's referral)
+  'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee',
+  'referralActualFeeReceived', 'referralFeeReceivedDate',
   // Buyer inspection
   'inspectionOrdered', 'targetInspectionDate', 'inspectorName',
   'inspectionTypes', 'tcScheduleInspections', 'tcScheduleInspectionsOther',
@@ -310,6 +314,9 @@ export async function PATCH(
         updates[k] = v;
       }
     }
+    // Do this before validation and split calculation. Referral income has zero
+    // property-side production but uses its received fee as normal split GCI.
+    Object.assign(updates, applyReferralIncomeFinancials(txData, updates));
     const coAgentSplit = validateCoAgentSplit({ ...txData, ...updates });
     if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
     if (coAgentSplit.active) {
@@ -391,6 +398,11 @@ export async function PATCH(
       updates.outboundReferralFeePercent !== undefined ||
       updates.outboundReferralFeeDollar !== undefined ||
       updates.outboundReferralDollar !== undefined ||
+      updates.referralExpectedExternalGrossCommission !== undefined ||
+      updates.referralFeePercent !== undefined ||
+      updates.referralExpectedFee !== undefined ||
+      updates.referralActualFeeReceived !== undefined ||
+      updates.referralFeeReceivedDate !== undefined ||
       (updates.status !== undefined && updates.status !== txData.status)
     );
 

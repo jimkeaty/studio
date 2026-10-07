@@ -23,6 +23,7 @@ import {
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
+import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -306,6 +307,9 @@ const UPDATABLE_FIELDS = new Set([
   // Outbound referral fee — paid off the top of GCI before participant splits
   'hasOutboundReferral', 'outboundReferralAgentName', 'outboundReferralBrokerage',
   'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar',
+  // Referral-income workflow: a Keaty referral fee, not an outbound deduction.
+  'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee',
+  'referralActualFeeReceived', 'referralFeeReceivedDate',
   // Pre-listing inspection
   'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
   'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
@@ -542,6 +546,10 @@ export async function PATCH(req: NextRequest) {
     if (hasTransactionVersionConflict(existingData?.updatedAt, expectedUpdatedAt)) {
       return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
     }
+    // Keep every operational entry point on the same referral-income financial
+    // basis. The expected/actual fee becomes gross commission; the outside deal
+    // value is never allowed to inflate Keaty GCI.
+    Object.assign(updates, applyReferralIncomeFinancials(existingData || {}, updates));
     const coAgentSplit = validateCoAgentSplit({ ...existingData, ...updates });
     if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split');
     if (coAgentSplit.active) {
@@ -602,6 +610,8 @@ export async function PATCH(req: NextRequest) {
       'commissionCalculationMethod', 'commissionFlatAmount', 'salePrice',
       'dealSource', 'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent',
       'outboundReferralFeeDollar', 'outboundReferralDollar',
+      'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee',
+      'referralActualFeeReceived', 'referralFeeReceivedDate',
       'closedDate', 'contractDate',
     ]);
     const hasCommissionCalculationChange = Object.keys(body)

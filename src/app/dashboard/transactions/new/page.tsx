@@ -618,6 +618,15 @@ const schema = z.object({
   outboundReferralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
   outboundReferralFeeDollar: z.coerce.number().min(0).optional().or(z.literal('')),
 
+  // Referral-income file: Keaty receives a fee for referring a client out.
+  // These are deliberately separate from outboundReferral*, which deducts a
+  // fee from an ordinary property-side transaction's GCI.
+  referralExpectedExternalGrossCommission: z.coerce.number().min(0).optional().or(z.literal('')),
+  referralFeePercent: z.coerce.number().min(0).max(100).optional().or(z.literal('')),
+  referralExpectedFee: z.coerce.number().min(0).optional().or(z.literal('')),
+  referralActualFeeReceived: z.coerce.number().min(0).optional().or(z.literal('')),
+  referralFeeReceivedDate: z.string().optional(),
+
   // Inbound referral fee (we received a referred client and owe a referral fee)
   hasInboundReferral: z.boolean().optional(),
   inboundReferralAgentName: z.string().optional(),
@@ -1487,6 +1496,11 @@ export default function AddTransactionPage() {
       buyerWarrantyEducationRequested: '',
       sellerWarrantyEducationRequested: '',
       hasOutboundReferral: false,
+      referralExpectedExternalGrossCommission: '',
+      referralFeePercent: '',
+      referralExpectedFee: '',
+      referralActualFeeReceived: '',
+      referralFeeReceivedDate: '',
     },
   });
   const [, setBrokerFeeDefaults] = useState<{ buyerDefault: number; listingDefault: number } | null>(null);
@@ -1516,6 +1530,24 @@ export default function AddTransactionPage() {
   const txComplianceFeeAgentAllocation = form.watch('txComplianceFeeAgentAllocation') || 'primary_agent';
   const txComplianceFeePrimaryAgentAmount = Number(form.watch('txComplianceFeePrimaryAgentAmount')) || 0;
   const txComplianceFeeCoAgentAmount = Number(form.watch('txComplianceFeeCoAgentAmount')) || 0;
+  const referralExpectedExternalGrossCommission = Number(form.watch('referralExpectedExternalGrossCommission')) || 0;
+  const referralFeePercent = Number(form.watch('referralFeePercent')) || 0;
+  const referralActualFeeReceived = Number(form.watch('referralActualFeeReceived')) || 0;
+  const referralExpectedFee = referralExpectedExternalGrossCommission > 0 && referralFeePercent > 0
+    ? Math.round(referralExpectedExternalGrossCommission * (referralFeePercent / 100) * 100) / 100
+    : 0;
+
+  // A referral file carries no represented property-side GCI. Its expected
+  // referral fee is the planning GCI until the actual received fee is entered;
+  // at that point actual received is authoritative for the normal split.
+  useEffect(() => {
+    if (watchedClosingType !== 'referral') return;
+    const referralIncome = referralActualFeeReceived > 0 ? referralActualFeeReceived : referralExpectedFee;
+    form.setValue('referralExpectedFee', referralExpectedFee || '' as any, { shouldDirty: false });
+    form.setValue('gci', referralIncome || '' as any, { shouldDirty: false });
+    form.setValue('commissionCalculationMethod', 'flat_dollar' as any, { shouldDirty: false });
+    form.setValue('commissionFlatAmount', referralIncome || '' as any, { shouldDirty: false });
+  }, [watchedClosingType, referralExpectedFee, referralActualFeeReceived, form]);
 
   // A user can switch an add form from a listing/referral into a buyer
   // transaction after the initial type selection. Apply the standard $395
@@ -2539,6 +2571,11 @@ export default function AddTransactionPage() {
           outboundReferralAgentName: tx.outboundReferralAgentName || '',
           outboundReferralBrokerage: tx.outboundReferralBrokerage || '',
           outboundReferralFee: tx.outboundReferralFee || '',
+          referralExpectedExternalGrossCommission: tx.referralExpectedExternalGrossCommission ?? tx.referralExpectedGrossCommission ?? '',
+          referralFeePercent: tx.referralFeePercent ?? tx.referralIncomePercent ?? '',
+          referralExpectedFee: tx.referralExpectedFee ?? tx.referralFeeExpected ?? '',
+          referralActualFeeReceived: tx.referralActualFeeReceived ?? tx.referralFeeActualReceived ?? '',
+          referralFeeReceivedDate: tx.referralFeeReceivedDate || '',
           outboundReferralFeePercent: resolvedOutboundReferralPercent,
           outboundReferralFeeDollar: resolvedOutboundReferralDollar,
           outboundReferralEmail: tx.outboundReferralEmail || '',
@@ -5454,33 +5491,36 @@ export default function AddTransactionPage() {
                   <FormItem><FormLabel>Referred-To Agent Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><Input type="tel" placeholder="(337) 555-6789" {...field} /></FormControl></FormItem>
                 )} />
               </Grid2>
-              <Grid2>
-                <FormField control={form.control} name="gci" render={({ field }) => (
-                  <FormItem><FormLabel>Expected Gross Commission ($) <span className="text-muted-foreground font-normal text-xs">(optional)</span></FormLabel><FormControl><CurrencyInput value={field.value as any} onChange={(value) => field.onChange(value)} placeholder="0" /></FormControl><FormDescription className="text-xs">Use when known to estimate the referral fee. It is not required to save.</FormDescription></FormItem>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 space-y-3 dark:border-emerald-800 dark:bg-emerald-950/20">
+                <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">Referral Fee Income</p>
+                <p className="text-xs text-emerald-800 dark:text-emerald-300">This is not a property-side sale for the referring agent: it records the fee Keaty receives for the referral. It creates <strong>zero sides and zero dollar volume</strong>, while the fee is split under the agent’s normal plan and counts toward company GCI and tier progression.</p>
+                <Grid2>
+                  <FormField control={form.control} name="referralExpectedExternalGrossCommission" render={({ field }) => (
+                    <FormItem><FormLabel>Expected Gross Commission on Outside Deal ($)</FormLabel><FormControl><CurrencyInput value={field.value as any} onChange={(value) => field.onChange(value)} placeholder="19,500" /></FormControl><FormDescription className="text-xs">The other transaction’s total commission; this is not Keaty GCI.</FormDescription></FormItem>
+                  )} />
+                  <FormField control={form.control} name="referralFeePercent" render={({ field }) => (
+                    <FormItem><FormLabel>Keaty Referral Fee %</FormLabel><FormControl><PercentInput value={field.value as any} onChange={(value) => field.onChange(value)} placeholder="25" /></FormControl><FormDescription className="text-xs">For example, 25% of $19,500 = $4,875 expected to Keaty.</FormDescription></FormItem>
+                  )} />
+                </Grid2>
+                <Grid2>
+                  <FormItem><FormLabel>Expected Referral Fee to Keaty ($)</FormLabel><div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold">{formatCurrencyDisplay(referralExpectedFee)}</div><FormDescription className="text-xs">Auto-calculated from the two values above. The actual received fee below becomes authoritative when entered.</FormDescription></FormItem>
+                  <FormField control={form.control} name="referralActualFeeReceived" render={({ field }) => (
+                    <FormItem><FormLabel>Actual Referral Fee Received ($)</FormLabel><FormControl><CurrencyInput value={field.value as any} onChange={(value) => field.onChange(value)} placeholder="0" /></FormControl><FormDescription className="text-xs">When entered, this replaces the expected fee as GCI for the split and reporting.</FormDescription></FormItem>
+                  )} />
+                </Grid2>
+                <FormField control={form.control} name="referralFeeReceivedDate" render={({ field }) => (
+                  <FormItem className="max-w-sm"><FormLabel>Fee Received Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormDescription className="text-xs">Use the date Keaty actually receives the check; mark the referral closed once received.</FormDescription></FormItem>
                 )} />
-                <FormField control={form.control} name="outboundReferralFeePercent" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Referral Fee % (optional)</FormLabel>
-                    <FormControl>
-                      <PercentInput value={field.value as any} onChange={(e) => field.onChange(e)} placeholder="25" />
-                    </FormControl>
-                    <FormDescription className="text-xs">Typical range: 25–40%</FormDescription>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="outboundReferralFeeDollar" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Referral Fee $ (optional)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput
-                        value={field.value as any}
-                        onChange={(val) => field.onChange(val)}
-                        placeholder="0"
-                      />
-                    </FormControl>
-                    <FormDescription className="text-xs">Enter the estimated referral check amount.</FormDescription>
-                  </FormItem>
-                )} />
-              </Grid2>
+                {(referralExpectedFee > 0 || referralActualFeeReceived > 0) && (
+                  <div className="rounded-md border border-emerald-200 bg-white/70 p-3 text-sm dark:border-emerald-800 dark:bg-slate-950/30">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <span>Expected fee: <strong>{formatCurrencyDisplay(referralExpectedFee)}</strong></span>
+                      <span>Recognized GCI: <strong>{formatCurrencyDisplay(referralActualFeeReceived || referralExpectedFee)}</strong></span>
+                      <span>Basis: <strong>{referralActualFeeReceived > 0 ? 'actual received' : 'expected'}</strong></span>
+                    </div>
+                  </div>
+                )}
+              </div>
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Notes</FormLabel>

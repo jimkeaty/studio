@@ -21,6 +21,7 @@ import {
   synchronizeOperationalCloseDate,
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
+import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -478,8 +479,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             updates[field] = val === '' || val === null ? null : val;
           }
           }
-        }
+      }
       synchronizeOperationalCloseDate(updates);
+      Object.assign(updates, applyReferralIncomeFinancials(intake, updates));
       const intakeCoAgentSplit = validateCoAgentSplit({ ...intake, ...updates });
       if (!intakeCoAgentSplit.valid) return jsonError(400, intakeCoAgentSplit.error || 'Invalid co-agent split');
       if (intakeCoAgentSplit.active) {
@@ -577,7 +579,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // ── Recalculate splitSnapshot when commission fields change ──────────
         // The ledger and agent view display from splitSnapshot, NOT raw agentPct/agentDollar.
         // Without this, commission edits appear to save but the displayed values don't update.
-        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource', 'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralDollar']);
+        const COMMISSION_TRIGGER = new Set(['salePrice', 'commissionPercent', 'gci', 'commission', 'commissionBasePrice', 'commissionCalculationMethod', 'commissionFlatAmount', 'isPassThrough', 'dealSource', 'hasOutboundReferral', 'outboundReferralFee', 'outboundReferralFeePercent', 'outboundReferralFeeDollar', 'outboundReferralDollar', 'referralExpectedExternalGrossCommission', 'referralFeePercent', 'referralExpectedFee', 'referralActualFeeReceived', 'referralFeeReceivedDate']);
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
         const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
@@ -744,6 +746,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
       const intakeCoAgentSplit = validateCoAgentSplit(intake);
       if (!intakeCoAgentSplit.valid) return jsonError(400, intakeCoAgentSplit.error || 'Invalid co-agent split');
+      // An approved referral-income file applies its normal agent/company split
+      // to Keaty's expected or actually received fee—not the outside deal's GCI.
+      Object.assign(intake, applyReferralIncomeFinancials({}, intake));
 
       let agentId = String(intake.agentId || '').trim();
       const agentDisplayName = String(intake.agentDisplayName || '').trim();

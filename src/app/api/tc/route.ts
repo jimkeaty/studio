@@ -11,6 +11,8 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
+import { applyReferralIncomeFinancials, isReferralIncomeTransaction } from '@/lib/transactions/referralIncome';
+import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -93,6 +95,12 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const workingWithTc = toBool(body.workingWithTc) || body.tcWorking === 'yes';
     const isListingType = closingType === 'listing' || closingType === 'dual';
+    const referralFeeReceivedDate = toStr(body.referralFeeReceivedDate);
+
+    // A referral-income transaction is not a property-side deal. Normalize its
+    // expected/received fee before any split values are read, so the form's
+    // external sale price and commission never become Keaty GCI.
+    Object.assign(body, applyReferralIncomeFinancials({}, { ...body, closingType: closingType || '' }));
 
     // Commission split snapshot
     const _rawAgentNet = toNum(body.agentDollar) || 0;
@@ -103,14 +111,28 @@ export async function POST(req: NextRequest) {
     const _agentNetCommission = _agentPaysFee && Math.abs(_rawAgentNet - _expectedPostFee) > 0.01
       ? _expectedPostFee
       : _rawAgentNet;
-    const splitSnapshot = (toNum(body.agentDollar) || toNum(body.brokerGci))
+    let referralCalculation: Awaited<ReturnType<typeof resolveTransactionCalculation>> | null = null;
+    if (isReferralIncomeTransaction({ ...body, closingType: closingType || '' }) && (toNum(body.gci) || 0) > 0) {
+      try {
+        referralCalculation = await resolveTransactionCalculation({
+          agentId,
+          agentDisplayName,
+          commission: toNum(body.gci) || 0,
+          dealSource: toStr(body.dealSource),
+          transactionDate: toStr(body.referralFeeReceivedDate) || toStr(body.closedDate) || toStr(body.contractDate),
+        });
+      } catch (error: any) {
+        console.warn('[POST /api/tc] referral-income split preview unavailable:', error?.message);
+      }
+    }
+    const splitSnapshot = referralCalculation?.splitSnapshot ?? ((toNum(body.agentDollar) || toNum(body.brokerGci))
       ? {
           grossCommission: toNum(body.gci) || toNum(body.commission) || null,
           agentNetCommission: _agentNetCommission || null,
           companyRetained: toNum(body.brokerGci) || null,
           ...(_agentPaysFee ? { agentFeeDeduction: _txFeeAmt } : {}),
         }
-      : null;
+      : null);
 
     // Documents
     const documents = Array.isArray(body.documents)
@@ -258,6 +280,15 @@ export async function POST(req: NextRequest) {
       brokerGci: toNum(body.brokerGci) || null,
       brokerPct: toNum(body.brokerPct) || null,
       ...(splitSnapshot ? { splitSnapshot } : {}),
+      ...(referralCalculation ? {
+        creditSnapshot: referralCalculation.creditSnapshot,
+        agentType: referralCalculation.agentType,
+        calculationModel: referralCalculation.calculationModel,
+        agentPct: referralCalculation.splitSnapshot.agentSplitPercent,
+        agentDollar: referralCalculation.splitSnapshot.agentNetCommission,
+        brokerPct: referralCalculation.splitSnapshot.companySplitPercent,
+        brokerGci: referralCalculation.splitSnapshot.companyRetained,
+      } : {}),
       sellerPayingListingAgent: toNum(body.sellerPayingListingAgent) || null,
       sellerPayingListingAgentUnknown: toBool(body.sellerPayingListingAgentUnknown),
       sellerPayingBuyerAgent: body.cooperatingAgentCommissionMethod === 'flat_dollar'
@@ -413,6 +444,14 @@ export async function POST(req: NextRequest) {
       inboundReferralFeePercent: toNum(body.inboundReferralFeePercent) || null,
       inboundReferralFeeDollar: toNum(body.inboundReferralFeeDollar) || null,
 
+      // Referral-income workflow: expected fee is used for a pre-payment
+      // preview; actual received fee is authoritative when Keaty receives it.
+      referralExpectedExternalGrossCommission: toNum(body.referralExpectedExternalGrossCommission),
+      referralFeePercent: toNum(body.referralFeePercent),
+      referralExpectedFee: toNum(body.referralExpectedFee),
+      referralActualFeeReceived: toNum(body.referralActualFeeReceived),
+      referralFeeReceivedDate: toStr(body.referralFeeReceivedDate) || null,
+
       // Commercial fields
       commercialForLease: toBool(body.commercialForLease),
       commercialForSale: toBool(body.commercialForSale),
@@ -451,7 +490,9 @@ export async function POST(req: NextRequest) {
       documents,
 
       // System metadata
-      year: now.getFullYear(),
+      year: isReferralIncomeTransaction({ ...body, closingType: closingType || '' }) && (toNum(body.referralActualFeeReceived) ?? 0) > 0 && referralFeeReceivedDate
+        ? new Date(`${referralFeeReceivedDate || ''}T12:00:00Z`).getUTCFullYear()
+        : now.getFullYear(),
       source: 'agent_submission',
       createdAt: now,
       updatedAt: now,

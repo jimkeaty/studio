@@ -71,6 +71,11 @@ function toUtcDate(value: any): Date | null {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 }
 
+function earnedDate(t: any): Date | null {
+  const isReferralIncome = String(t?.closingType || '').trim().toLowerCase() === 'referral';
+  return toDate((isReferralIncome ? t?.referralFeeReceivedDate : null) ?? t?.closedDate ?? t?.contractDate);
+}
+
 // ── Main rebuild function ─────────────────────────────────────────────────────
 
 /**
@@ -169,7 +174,7 @@ export async function rebuildAgentRollup(
 
     // ── Calendar year filter (for leaderboard / performance stats) ──────────
     const txYear =
-      toYear(t.closedDate) ??
+      toYear((String(t.closingType || '').toLowerCase() === 'referral' ? t.referralFeeReceivedDate : null) ?? t.closedDate) ??
       toYear(t.contractDate) ??
       (num(t.year) || null);
 
@@ -224,7 +229,7 @@ export async function rebuildAgentRollup(
 
     // ── Anniversary cycle filter (for tier progression) ─────────────────
     if (status === 'closed') {
-      const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+      const txDateUtc = toUtcDate(earnedDate(t));
       if (txDateUtc && isInCycle(txDateUtc, cycle)) {
         const personalGci = num(activeSplitSnapshot?.grossCommission ?? t.commission ?? 0);
         const personalCompanyDollar = num(activeSplitSnapshot?.companyRetained ?? 0);
@@ -253,7 +258,7 @@ export async function rebuildAgentRollup(
 
       const t = doc.data() as any;
       const txYear =
-        toYear(t.closedDate) ??
+        toYear((String(t.closingType || '').toLowerCase() === 'referral' ? t.referralFeeReceivedDate : null) ?? t.closedDate) ??
         toYear(t.contractDate) ??
         (num(t.year) || null);
       const status = String(t.status || '').toLowerCase();
@@ -280,7 +285,7 @@ export async function rebuildAgentRollup(
       }
 
       if (status === 'closed') {
-        const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+        const txDateUtc = toUtcDate(earnedDate(t));
         if (txDateUtc && isInCycle(txDateUtc, cycle)) {
           if (!isPassThrough) {
             tierProgressionGci += num(coSplitSnapshot?.grossCommission ?? 0);
@@ -310,8 +315,9 @@ export async function rebuildAgentRollup(
       const status = String(t.status || '').toLowerCase();
       if (status !== 'closed') continue;
 
-      // Only count transactions within the anniversary cycle
-      const txDateUtc = toUtcDate(t.closedDate) ?? toUtcDate(t.contractDate);
+      // Only count transactions within the anniversary cycle. Referral fees
+      // use the date Keaty actually receives the payment.
+      const txDateUtc = toUtcDate(earnedDate(t));
       if (!txDateUtc || !isInCycle(txDateUtc, cycle)) continue;
 
       // Use GCI credit for tier progression (gross commission the member generated).

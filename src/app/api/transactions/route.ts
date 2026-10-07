@@ -7,6 +7,7 @@ import { normalizeDealSource } from '@/lib/normalizeDealSource'
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations'
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral'
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
+import { applyReferralIncomeFinancials, isReferralIncomeTransaction } from '@/lib/transactions/referralIncome'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
+    Object.assign(body, applyReferralIncomeFinancials({}, body))
 
     const agentId = String(body.agentId || '').trim()
     const agentDisplayName = String(body.agentDisplayName || '').trim()
@@ -68,12 +70,15 @@ export async function POST(req: NextRequest) {
     if (!agentDisplayName) return jsonError(400, 'agentDisplayName required')
     if (!ALLOWED_STATUS.has(status)) return jsonError(400, 'invalid status')
     if (!ALLOWED_TYPES.has(transactionType)) return jsonError(400, 'invalid transactionType')
-    if (!address) return jsonError(400, 'address required')
+    if (!address && !isReferralIncomeTransaction(body)) return jsonError(400, 'address required')
     if (!ALLOWED_SOURCES.has(source)) return jsonError(400, 'invalid source')
     const coAgentSplit = validateCoAgentSplit(body)
     if (!coAgentSplit.valid) return jsonError(400, coAgentSplit.error || 'Invalid co-agent split')
 
-    const year = toYearFromDates(closedDate, contractDate)
+    const year = toYearFromDates(
+      isReferralIncomeTransaction(body) ? toOptionalString(body.referralFeeReceivedDate) || closedDate : closedDate,
+      contractDate,
+    )
     const now = new Date()
     const outboundReferral = resolveOutboundReferral(body, commission)
 

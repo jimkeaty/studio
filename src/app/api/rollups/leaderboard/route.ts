@@ -335,7 +335,8 @@ async function handlePeriod(
     // Determine the relevant date for this transaction
     let txDate: Date | null = null;
     if (status === "closed") {
-      txDate = toDate(t.closedDate || t.closingDate);
+      const isReferralIncome = String(t.closingType || '').toLowerCase() === 'referral';
+      txDate = toDate((isReferralIncome ? t.referralFeeReceivedDate : null) || t.closedDate || t.closingDate);
     } else if (status === "pending" || status === "under_contract") {
       txDate = toDate(t.contractDate || t.pendingDate || t.underContractDate);
     }
@@ -344,7 +345,8 @@ async function handlePeriod(
     // Check if within range
     if (txDate < rangeStart || txDate > rangeEnd) continue;
 
-    // Referral closings count toward net commission but NOT toward volume, unit count, or GCI.
+    // Referral income has zero property-side volume and units, but its received
+    // fee remains normal GCI under the referring agent's commission plan.
     const txClosingType = String(t.closingType || "").toLowerCase();
     const isReferralClosing = txClosingType === "referral";
     const isPassThrough = isPassThroughTransaction(t);
@@ -365,11 +367,11 @@ async function handlePeriod(
           agg.closed += credit.closedSides;
           // Production volume is credited once per represented side; income stays split.
           agg.closedVolume += salePrice * credit.volumeMultiplier;
-          agg.agentNetCommission += num(participant.splitSnapshot?.agentNetCommission ?? participant.commission);
-          if (!isPassThrough) {
-            agg.totalGCI += num(participant.splitSnapshot?.grossCommission ?? participant.commission);
-            agg.companyDollar += num(participant.splitSnapshot?.companyRetained ?? 0);
-          }
+        }
+        agg.agentNetCommission += num(participant.splitSnapshot?.agentNetCommission ?? participant.commission);
+        if (!isPassThrough) {
+          agg.totalGCI += num(participant.splitSnapshot?.grossCommission ?? participant.commission);
+          agg.companyDollar += num(participant.splitSnapshot?.companyRetained ?? 0);
         }
       } else if (status === "pending" || status === "under_contract") {
         if (!isReferralClosing) agg.pending += credit.pendingSides;

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTotalSideMultiplier } from '@/lib/transactions/resolveProductionCredit';
+import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import type admin from 'firebase-admin';
 import { format } from 'date-fns';
 import type {
@@ -21,6 +22,7 @@ interface Transaction {
   agentId: string;
   status: string;
   closedDate?: admin.firestore.Timestamp | string;
+  referralFeeReceivedDate?: admin.firestore.Timestamp | string;
   contractDate?: admin.firestore.Timestamp | string;
   brokerProfit: number;
   salePrice?: number | string | null;
@@ -281,7 +283,7 @@ export async function GET(req: NextRequest) {
     // Derive each transaction's year from the year field (if present) or from closedDate/contractDate
     const getTxYear = (t: Transaction): number | null => {
       if (t.year && typeof t.year === 'number') return t.year;
-      const cd = parseDate(t.closedDate) ?? parseDate(t.contractDate);
+      const cd = parseDate(t.referralFeeReceivedDate) ?? parseDate(t.closedDate) ?? parseDate(t.contractDate);
       return cd ? cd.getFullYear() : null;
     };
 
@@ -570,9 +572,11 @@ export async function GET(req: NextRequest) {
       const rawType = (t.transactionType || 'unknown').toLowerCase();
       const catKey = (rawType in categoryBreakdown.closed ? rawType : 'unknown') as keyof CategoryMetrics;
       const srcKey = (t.dealSource || 'other').toLowerCase();
-      // Referral closings count toward net income but NOT toward volume, unit count, GCI, or contracts.
+      // Referral income has zero property-side sides, volume, and contracts,
+      // while the received referral fee remains normal GCI/company margin.
       const txClosingType = String(t.closingType || '').toLowerCase();
       const isReferralClosing = txClosingType === 'referral';
+      const isPassThrough = isPassThroughTransaction(t);
       // Dual Agent counts as 2 sides (1 buyer + 1 listing)
       const isDual = txClosingType === 'dual';
       const sideCount = isDual ? 2 : 1;
@@ -609,30 +613,34 @@ export async function GET(req: NextRequest) {
       }
 
       if (t.status === 'closed') {
-        const closedDate = parseDate(t.closedDate);
+        const closedDate = parseDate(isReferralClosing ? t.referralFeeReceivedDate || t.closedDate : t.closedDate);
         if (!isAllYears && (!closedDate || closedDate.getFullYear() !== year)) continue;
         if (isAllYears && !closedDate) continue;
         const mi = closedDate!.getMonth();
         // Partial-month cap: skip current-month transactions closed after today's day
         if (isCurrentYear && mi === currentCalMonth && closedDate!.getDate() > todayDayOfMonth) continue;
         if (!isAllYears) {
-          if (!isReferralClosing) {
+          if (!isPassThrough) {
             months[mi].totalGCI += gci;
             months[mi].grossMargin += companyRetained;
             months[mi].transactionFees += txFee;
+          }
+          if (!isReferralClosing) {
             months[mi].closedVolume += productionVolume;
             months[mi].closedCount += sideCount;
           }
           monthlyNetIncome[mi] += agentNet;
         }
 
-        // Referral closings: count net income only, not volume/units/GCI
+        // Referral closings: count GCI and net income, but no volume/units.
         totals.netIncome += agentNet;
         totals.agentNetCommission += agentNet;
-        if (!isReferralClosing) {
+        if (!isPassThrough) {
           totals.totalGCI += gci;
           totals.grossMargin += companyRetained;
           totals.transactionFees += txFee;
+        }
+        if (!isReferralClosing) {
           totals.closedVolume += productionVolume;
           totals.closedCount += sideCount;
         }
