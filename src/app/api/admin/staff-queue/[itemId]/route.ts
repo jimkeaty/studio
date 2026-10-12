@@ -305,6 +305,7 @@ export async function PATCH(
     const reviewerEmail = userRecord?.email || decoded.uid;
 
     // ── Apply transaction field updates ─────────────────────────────────────
+    let persistedTransaction: Record<string, any> | null = null;
     if (txUpdates && item.transactionId) {
       const txRef = adminDb.collection('transactions').doc(item.transactionId);
 
@@ -456,6 +457,16 @@ export async function PATCH(
           throw error;
         }
 
+        // A queue acknowledgement is not sufficient: return the exact canonical
+        // record that was written so Staff can confirm that ledger, TC, agent,
+        // and Accounting views will all read the same values.
+        const persistedTransactionSnap = await txRef.get();
+        if (!persistedTransactionSnap.exists) return jsonError(500, 'Transaction save could not be verified');
+        persistedTransaction = {
+          id: persistedTransactionSnap.id,
+          ...serializeFirestore(persistedTransactionSnap.data() || {}),
+        };
+
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
         try {
           const agentId = String(currentTx.agentId || item.agentId || '').trim();
@@ -573,12 +584,23 @@ export async function PATCH(
       // Persist the updated documents array to the linked transaction
       const newDocs = body.documents;
       if (Array.isArray(newDocs) && item.transactionId) {
-        await adminDb.collection('transactions').doc(item.transactionId).update({
+        const transactionRef = adminDb.collection('transactions').doc(item.transactionId);
+        await transactionRef.update({
           documents: newDocs,
           updatedAt: now,
         });
+        const persistedDocumentSnap = await transactionRef.get();
+        if (!persistedDocumentSnap.exists) return jsonError(500, 'Document save could not be verified');
+        return NextResponse.json({
+          ok: true,
+          persistenceVerified: true,
+          transaction: {
+            id: persistedDocumentSnap.id,
+            ...serializeFirestore(persistedDocumentSnap.data() || {}),
+          },
+        });
       }
-      return NextResponse.json({ ok: true });
+      return jsonError(400, 'No linked transaction is available for document storage');
     } else if (queueStatus) {
       itemUpdates.status = queueStatus;
     }
@@ -721,7 +743,11 @@ export async function PATCH(
       } catch (e) { console.error('[staff-queue PATCH] TC notification error:', e); }
     })();
 
-    return NextResponse.json({ ok: true, updated: { id: itemId, ...itemUpdates } });
+    return NextResponse.json({
+      ok: true,
+      updated: { id: itemId, ...itemUpdates },
+      ...(persistedTransaction ? { transaction: persistedTransaction, persistenceVerified: true } : {}),
+    });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }

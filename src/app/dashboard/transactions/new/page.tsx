@@ -3441,10 +3441,10 @@ export default function AddTransactionPage() {
           body: JSON.stringify(apiBody),
         });
         const data = await res.json();
-        if (!res.ok) {
+        if (!res.ok || !data.ok || !data.persistenceVerified || !data.transaction) {
           toast({
             title: res.status === 409 ? 'Transaction changed — refresh required' : 'Save failed',
-            description: data.error || 'Could not save changes.',
+            description: data.error || 'The transaction save could not be verified. Refresh the file before trying again.',
             variant: 'destructive',
           });
           return;

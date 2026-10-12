@@ -214,8 +214,26 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const { doc, collection } = result;
     const docRef = adminDb.collection(collection).doc(id);
-    const intake = doc.data()!;
+    let intake = doc.data()!;
     const now = new Date();
+
+    // A reopened TC item is an index into its canonical transaction, not a
+    // competing financial record. Before approval, refresh its calculation
+    // inputs from that transaction so an older queue wrapper cannot restore
+    // prior commission, pricing, party, or document values over a staff/admin
+    // correction that has already been saved.
+    const linkedTransactionId = String(intake.approvedTransactionId || intake.transactionId || '').trim();
+    if (action === 'approve' && linkedTransactionId) {
+      const linkedTransactionSnap = await adminDb.collection('transactions').doc(linkedTransactionId).get();
+      if (linkedTransactionSnap.exists) {
+        intake = {
+          ...intake,
+          ...linkedTransactionSnap.data(),
+          approvedTransactionId: linkedTransactionId,
+          transactionId: linkedTransactionId,
+        };
+      }
+    }
 
     // ── Workflow updates (no action specified — checklist, status, TC assignment) ──
     if (!action) {
@@ -489,13 +507,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         updates.primaryAgentSplitPercent = intakeCoAgentSplit.primaryPercent;
         updates.coAgentSplitPercent = intakeCoAgentSplit.coAgentPercent;
       }
-      await docRef.update(updates);
 
       // ── Sync edits to the linked transactions doc so the agent sees them immediately ──
       // If this intake already has an approvedTransactionId (set either at agent submission
       // or at a prior approval), mirror the same field changes to the transactions doc.
       // Fields that are intake-only (workflow status, checklist, etc.) are excluded.
       const linkedTxId = toOptStr(intake.approvedTransactionId);
+      let persistedTransaction: Record<string, any> | null = null;
       if (linkedTxId) {
         // Sync ALL editable fields to the transactions document (single source of truth).
         // Since transactions is now the canonical record, every TC edit must be mirrored there.
@@ -694,11 +712,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               await versionedTransactionRef.update(txSyncUpdate);
             }
           }
+          const persistedTransactionSnap = await versionedTransactionRef.get();
+          if (!persistedTransactionSnap.exists) return jsonError(500, 'Transaction save could not be verified');
+          persistedTransaction = {
+            id: persistedTransactionSnap.id,
+            ...serializeFirestore(persistedTransactionSnap.data() || {}),
+          };
         } catch (syncErr: any) {
           if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
           }
-          console.warn('[TC update] Failed to sync to transactions doc:', syncErr.message);
+          // Never acknowledge an intake wrapper update if its canonical
+          // transaction write did not succeed. The queue is only an index; the
+          // transaction record is the source of truth for all later views.
+          console.error('[TC update] Failed to sync canonical transaction:', syncErr.message);
+          return jsonError(500, 'Transaction save failed before the canonical record could be verified. Refresh and try again.');
         }
         // Rebuild agent rollup so leaderboard and tier stay in sync after commission change
         if (hasCommissionChange) {
@@ -719,6 +747,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }
       }
 
+      // Update the queue wrapper only after the linked canonical record has
+      // been written and read back successfully. This prevents the queue from
+      // displaying a value that the ledger, accounting, or agent view lacks.
+      await docRef.update(updates);
+
       // Notify agent that TC has edited their transaction
       void (async () => {
         try {
@@ -737,7 +770,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           }
         } catch (e) { console.error('[TC update] notification error:', e); }
       })();
-      return NextResponse.json({ ok: true, status: 'updated' });
+      return NextResponse.json({
+        ok: true,
+        status: 'updated',
+        ...(persistedTransaction ? { transaction: persistedTransaction, persistenceVerified: true } : {}),
+      });
     }
 
     // ── APPROVE → create or update transaction ──────────────────────────────
@@ -1267,7 +1304,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             // Preserve the override flag
             updatePayload.commissionOverridden = true;
           }
-          await existingTxRef.update(updatePayload);
+          try {
+            // The just-read canonical version is a required precondition. If a
+            // staff/admin/agent save lands while TC is approving, do not let
+            // this older approval overwrite it; return a clear refresh action.
+            await existingTxRef.update(updatePayload, { lastUpdateTime: existingTxSnap.updateTime });
+          } catch (error: any) {
+            if (error?.code === 9) {
+              return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before approving it.');
+            }
+            throw error;
+          }
           transactionId = existingTxId;
         } else {
           // Linked transaction was deleted — create a fresh one

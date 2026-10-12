@@ -57,6 +57,37 @@ test('Task 9: the unified edit form persists its loaded version and shows a refr
   assert.match(transactionForm, /transactionVersionRef\.current = normalizeTransactionVersion\(data\.transaction\?\.updatedAt\)/);
 });
 
+test('operational saves acknowledge only the final canonical document and its fresh version', () => {
+  assert.match(adminRoute, /const finalSnap = await adminDb\.collection\('transactions'\)\.doc\(id\)\.get\(\);/);
+  assert.match(adminRoute, /persistenceVerified: true/);
+  assert.match(adminRoute, /updates\.updatedAt = new Date\(\)\.toISOString\(\)/);
+  assert.match(agentTransactionRoute, /const finalSnap = await txRef\.get\(\);/);
+  assert.match(agentTransactionRoute, /persistenceVerified: true/);
+  assert.match(staffQueueRoute, /const persistedTransactionSnap = await txRef\.get\(\);/);
+  assert.match(staffQueueRoute, /persistenceVerified: true/);
+  assert.match(tcRoute, /const persistedTransactionSnap = await versionedTransactionRef\.get\(\);/);
+  assert.match(tcRoute, /await docRef\.update\(updates\);/);
+  assert.match(
+    transactionForm,
+    /!res\.ok \|\| !data\.ok \|\| !data\.persistenceVerified \|\| !data\.transaction/,
+    'The editor must not present an unverified API acknowledgement as a successful save.',
+  );
+});
+
+test('re-approving a TC queue item cannot restore a stale wrapper over a newer canonical save', () => {
+  assert.match(
+    tcRoute,
+    /if \(action === 'approve' && linkedTransactionId\)[\s\S]*?\.\.\.linkedTransactionSnap\.data\(\)/,
+    'TC approval must hydrate its financial inputs from the canonical linked transaction.',
+  );
+  assert.match(
+    tcRoute,
+    /existingTxRef\.update\(updatePayload, \{ lastUpdateTime: existingTxSnap\.updateTime \}\)/,
+    'TC re-approval must use the just-read canonical transaction as a Firestore write precondition.',
+  );
+  assert.match(tcRoute, /Refresh the file before approving it\./);
+});
+
 test('transaction load responses serialize legacy date versions before an editor can save', () => {
   assert.match(agentTransactionRoute, /import \{ hasTransactionVersionConflict, normalizeTransactionVersion \} from '@\/lib\/transactions\/transactionVersion';/);
   assert.match(agentTransactionRoute, /updatedAt: normalizeTransactionVersion\(data\.updatedAt\) \|\| normalizeTransactionVersion\(snap\.updateTime\) \|\| null/);

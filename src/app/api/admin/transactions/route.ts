@@ -719,7 +719,10 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    updates.updatedAt = new Date();
+    // Use one serialized application version for the canonical transaction. The
+    // Firestore write precondition remains the race-proof authority, while this
+    // stable value is returned to every editor as its next save version.
+    updates.updatedAt = new Date().toISOString();
     try {
       const transactionRef = adminDb.collection('transactions').doc(id);
       if (cooperatingCommission.auditEvent) {
@@ -746,9 +749,10 @@ export async function PATCH(req: NextRequest) {
       }
       throw error;
     }
-    // Fetch the updated doc to return
+    // Read the canonical record after the guarded write. Queue/notification work
+    // below may add operational metadata, so the final response is re-read at
+    // the end of this handler rather than acknowledging a stale local payload.
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
-    const updated = serializeFirestore({ id: updatedSnap.id, ...updatedSnap.data() });
 
     // ── TC Queue refresh ───────────────────────────────────────────────────
     // Operational edits use the same one-row-per-transaction workflow rule as
@@ -792,7 +796,7 @@ export async function PATCH(req: NextRequest) {
         if (txForTcQueue?.tcIntakeId !== queueUpdate.id) {
           await adminDb.collection('transactions').doc(id).update({
             tcIntakeId: queueUpdate.id,
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
           });
         }
       }
@@ -1073,7 +1077,18 @@ export async function PATCH(req: NextRequest) {
     // Closed co-agent files remain on this same transaction ID. The allocation
     // record above provides each agent's volume, net, fee, and unit credit.
 
-    return NextResponse.json({ ok: true, transaction: updated });
+    // A success response must describe the final canonical document, not the
+    // request body or an earlier pre-queue snapshot. The unified editor uses
+    // this version for its next optimistic-concurrency precondition.
+    const finalSnap = await adminDb.collection('transactions').doc(id).get();
+    if (!finalSnap.exists) return jsonError(500, 'Transaction save could not be verified');
+    const transaction = serializeFirestore({ id: finalSnap.id, ...finalSnap.data() });
+    return NextResponse.json({
+      ok: true,
+      transaction,
+      persistenceVerified: true,
+      savedFields: Object.keys(updates),
+    });
   } catch (err: any) {
     console.error('[api/admin/transactions PATCH]', err);
     return jsonError(500, err.message || 'Internal Server Error');

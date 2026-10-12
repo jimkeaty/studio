@@ -1196,12 +1196,24 @@ export async function PATCH(
       }
     })();
 
+    // Return the post-side-effect canonical document so the editor never uses
+    // the pre-save version after a TC queue refresh has touched this record.
+    const finalSnap = await txRef.get();
+    if (!finalSnap.exists) return jsonError(500, 'Transaction save could not be verified');
+    const finalData = finalSnap.data() || {};
+
     return NextResponse.json({
       ok: true,
       updated: Object.keys(updates),
       resubmitted: Boolean(tcQueueUpdate?.created || tcQueueUpdate?.reopened),
       tcQueueRefreshed: Boolean(tcQueueUpdate),
       tcIntakeId: tcQueueUpdate?.id ?? txData.tcIntakeId ?? null,
+      persistenceVerified: true,
+      transaction: {
+        id: finalSnap.id,
+        ...finalData,
+        updatedAt: normalizeTransactionVersion(finalData.updatedAt) || normalizeTransactionVersion(finalSnap.updateTime) || null,
+      },
     });
   } catch (err: any) {
     console.error('[api/agent/transactions/[txId]]', err);
