@@ -25,6 +25,7 @@ import {
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
+import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -339,8 +340,7 @@ export async function PATCH(
             allowed.manualGciOverride = true;
           }
         } else if (allowed.commissionCalculationMethod === 'percentage') {
-          allowed.commissionFlatAmount = null;
-          allowed.manualGciOverride = false;
+          normalizePercentageCommissionMethod(currentTx, allowed);
         }
 
         // ── Auto-recalculate commission when financial fields change ──────────

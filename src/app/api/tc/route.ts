@@ -13,6 +13,7 @@ import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroug
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { applyReferralIncomeFinancials, isReferralIncomeTransaction } from '@/lib/transactions/referralIncome';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
+import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
     // expected/received fee before any split values are read, so the form's
     // external sale price and commission never become Keaty GCI.
     Object.assign(body, applyReferralIncomeFinancials({}, { ...body, closingType: closingType || '' }));
+    normalizePercentageCommissionMethod({}, body);
 
     // Commission split snapshot
     const _rawAgentNet = toNum(body.agentDollar) || 0;
@@ -265,6 +267,8 @@ export async function POST(req: NextRequest) {
       commissionPercent: toNum(body.commissionPercent) || null,
       commissionBasePrice: toNum(body.commissionBasePrice) || null,
       commissionMode: toStr(body.commissionMode) || null,
+      commissionCalculationMethod: body.commissionCalculationMethod === 'flat_dollar' ? 'flat_dollar' : 'percentage',
+      commissionFlatAmount: body.commissionCalculationMethod === 'flat_dollar' ? toNum(body.commissionFlatAmount) : null,
       cooperatingAgentCommissionMethod: body.cooperatingAgentCommissionMethod === 'flat_dollar' ? 'flat_dollar' : 'percentage',
       cooperatingAgentCommissionPercent: toNum(body.cooperatingAgentCommissionPercent),
       cooperatingAgentCommissionFlatAmount: toNum(body.cooperatingAgentCommissionFlatAmount),

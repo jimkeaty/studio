@@ -248,7 +248,8 @@ test('manual GCI and gross commission rate overrides survive save and reopen ind
   assert.match(adminRouteSource, /'manualCommissionPercentOverride', 'manualCommissionPercentOverriddenBy', 'manualCommissionPercentOverriddenAt'/);
   assert.match(createTransactionSource, /manualGciOverride: toBool\(body\.manualGciOverride\)/);
   assert.match(createTransactionSource, /manualCommissionPercentOverride: toBool\(body\.manualCommissionPercentOverride\)/);
-  assert.match(agentRouteSource, /const manualGciOverride = updates\.manualGciOverride === true \|\| txData\.manualGciOverride === true/);
+  assert.match(agentRouteSource, /const manualGciOverride = updates\.commissionCalculationMethod === 'percentage'/);
+  assert.match(agentRouteSource, /: updates\.manualGciOverride === true \|\| txData\.manualGciOverride === true/);
 });
 
 test('a newly edited manual percentage split must include both values and total 100%', () => {

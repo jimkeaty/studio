@@ -39,9 +39,11 @@ test('flat-dollar commission rehydrates and survives authorized transaction save
 
 test('intentional percentage changes clear the flat-dollar override path', () => {
   assert.match(agentRoute, /updates\.commissionCalculationMethod === 'percentage'/);
-  assert.match(agentRoute, /updates\.commissionFlatAmount = null/);
+  assert.match(agentRoute, /normalizePercentageCommissionMethod\(txData, updates\)/);
   assert.match(staffQueueRoute, /allowed\.commissionCalculationMethod === 'percentage'/);
+  assert.match(staffQueueRoute, /normalizePercentageCommissionMethod\(currentTx, allowed\)/);
   assert.match(tcRoute, /txSyncUpdate\.commissionCalculationMethod === 'percentage'/);
+  assert.match(tcRoute, /normalizePercentageCommissionMethod\(currentTxForUpdate, txSyncUpdate\)/);
 });
 
 test('Admin Ledger recalculates ordinary flat-dollar snapshots and retains authorized direct corrections', () => {

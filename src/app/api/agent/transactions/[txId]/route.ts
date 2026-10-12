@@ -18,6 +18,7 @@ import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducat
 import { hasTransactionVersionConflict, normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
+import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -375,8 +376,7 @@ export async function PATCH(
         updates.manualGciOverride = true;
       }
     } else if (updates.commissionCalculationMethod === 'percentage') {
-      updates.commissionFlatAmount = null;
-      updates.manualGciOverride = false;
+      normalizePercentageCommissionMethod(txData, updates);
     }
 
     // ── Auto-calculate GCI and splitSnapshot whenever commission-relevant fields change ──
@@ -416,7 +416,9 @@ export async function PATCH(
       }
     }
 
-    const manualGciOverride = updates.manualGciOverride === true || txData.manualGciOverride === true;
+    const manualGciOverride = updates.commissionCalculationMethod === 'percentage'
+      ? false
+      : updates.manualGciOverride === true || txData.manualGciOverride === true;
     const manualDollarSplitOverride = updates.commissionOverridden === true || txData.commissionOverridden === true;
     if (commissionFieldsChanged) {
       try {

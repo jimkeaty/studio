@@ -1329,7 +1329,13 @@ export default function AddTransactionPage() {
     setCommissionMode(next);
     form.setValue('commissionMode', next);
     form.setValue('commissionCalculationMethod', next === 'flat' ? 'flat_dollar' : 'percentage');
-    if (next === 'percent') form.setValue('commissionFlatAmount', '' as any);
+    if (next === 'percent') {
+      // Switching away from an exact-dollar commission is intentional. Clear the
+      // former flat amount and GCI so the percentage calculation below becomes
+      // the one value sent to every operational save route.
+      form.setValue('commissionFlatAmount', '' as any);
+      form.setValue('gci', '' as any);
+    }
     // Clear listing-side values when switching methods to avoid misinterpretation.
     // The cooperating-agent offer has its own independent method and must survive.
     form.setValue('sellerPayingListingAgent', '' as any);
@@ -1875,7 +1881,7 @@ export default function AddTransactionPage() {
       });
       form.setValue('gci', calcGCI as any);
     }
-  }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy]);
+  }, [watchedCBP, watchedCommPct, shortageInCommission, shortageAmount, shortageHandledBy, warrantyAtClosing, warrantyAmount, warrantyPaidBy, commissionMode]);
 
   // Commercial lease auto-calc: monthly × 12 × term = total lease value; then GCI
   useEffect(() => {

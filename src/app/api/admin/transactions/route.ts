@@ -24,6 +24,7 @@ import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroug
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
+import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -578,7 +579,7 @@ export async function PATCH(req: NextRequest) {
         grossCommission: flatAmount,
       };
     } else if (updates.commissionCalculationMethod === 'percentage') {
-      updates.commissionCalculationMethod = 'percentage';
+      normalizePercentageCommissionMethod(existingData || {}, updates);
     }
     const cooperatingCommission = buildCooperatingCommissionUpdate({
       current: existingData || {},

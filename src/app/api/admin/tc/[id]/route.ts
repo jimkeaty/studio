@@ -22,6 +22,7 @@ import {
 } from '@/lib/transactions/operationalEditFields';
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
+import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -598,8 +599,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
                 txSyncUpdate.manualGciOverride = true;
               }
             } else if (txSyncUpdate.commissionCalculationMethod === 'percentage') {
-              txSyncUpdate.commissionFlatAmount = null;
-              txSyncUpdate.manualGciOverride = false;
+              normalizePercentageCommissionMethod(currentTxForUpdate, txSyncUpdate);
             }
             const mergedWithMethod = { ...currentTxForUpdate, ...txSyncUpdate };
             const gciForCalc = ('commissionPercent' in txSyncUpdate && !('gci' in txSyncUpdate) && txSyncUpdate.commissionCalculationMethod !== 'flat_dollar')
@@ -744,6 +744,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (intake.status === 'approved' && intake.approvedTransactionId) {
         return jsonError(400, 'Intake is already approved');
       }
+      // A TC approval may be the first operational save after a prior flat-dollar
+      // entry is corrected. Normalize the intake in memory before calculating or
+      // materializing the canonical transaction so the stale flat GCI cannot win.
+      normalizePercentageCommissionMethod({}, intake);
       const intakeCoAgentSplit = validateCoAgentSplit(intake);
       if (!intakeCoAgentSplit.valid) return jsonError(400, intakeCoAgentSplit.error || 'Invalid co-agent split');
       // An approved referral-income file applies its normal agent/company split
