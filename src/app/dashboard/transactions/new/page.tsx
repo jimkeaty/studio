@@ -43,6 +43,7 @@ import { resolveTransactionSide, type TransactionSide } from '@/lib/transactions
 import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersion';
 import { optionalSelect, optionalStringArray } from '@/lib/transactions/optionalFormValues';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
+import { resolveSavedFlatDollarCommission } from '@/lib/transactions/commissionMethodRecovery';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -2492,6 +2493,18 @@ export default function AddTransactionPage() {
           ? Number(resolvedBrokerGci) + Number(resolvedAgentDollar)
           : 0;
         const resolvedGci = Number(explicitGci) > 0 ? explicitGci : (calculatedLegacyGci || inferredLegacyGci || '');
+        // A saved exact-dollar commission is canonical. Some legacy buyer files
+        // retained their percentage in sellerPayingBuyerAgent, which must never
+        // replace the saved dollar commission when this editor reopens in flat mode.
+        const resolvedFlatDollarCommission = savedFlatDollarMethod
+          ? resolveSavedFlatDollarCommission(tx)
+          : '';
+        const resolvedSellerPayingListingAgent = savedFlatDollarMethod && ['listing', 'dual'].includes(sideResolution.side || '')
+          ? resolvedFlatDollarCommission
+          : (tx.sellerPayingListingAgent ?? '');
+        const resolvedSellerPayingBuyerAgent = savedFlatDollarMethod && sideResolution.side === 'buyer'
+          ? resolvedFlatDollarCommission
+          : (tx.sellerPayingBuyerAgent ?? '');
 
         const resolvedCooperatingCommissionMethod = tx.cooperatingAgentCommissionMethod === 'flat_dollar'
           ? 'flat_dollar'
@@ -2521,12 +2534,12 @@ export default function AddTransactionPage() {
           commissionBasePrice: resolvedCommissionBasePrice,
           commissionMode: (savedFlatDollarMethod || tx.commissionMode === 'flat' ? 'flat' : 'percent') as any,
           commissionCalculationMethod: (savedFlatDollarMethod ? 'flat_dollar' : 'percentage') as any,
-          commissionFlatAmount: savedFlatDollarMethod ? (tx.commissionFlatAmount ?? resolvedGci) : '',
+          commissionFlatAmount: resolvedFlatDollarCommission,
           sellerCommissionPct: tx.sellerCommissionPct || tx.commissionPercent || '',
           buyerCommissionPct: tx.buyerCommissionPct || '',
-          sellerPayingListingAgent: tx.sellerPayingListingAgent ?? '',
+          sellerPayingListingAgent: resolvedSellerPayingListingAgent,
           sellerPayingListingAgentUnknown: Boolean(tx.sellerPayingListingAgentUnknown),
-          sellerPayingBuyerAgent: legacyCooperatingValue,
+          sellerPayingBuyerAgent: resolvedSellerPayingBuyerAgent,
           cooperatingAgentCommissionMethod: resolvedCooperatingCommissionMethod as any,
           cooperatingAgentCommissionPercent: resolvedCooperatingCommissionPercent,
           cooperatingAgentCommissionFlatAmount: resolvedCooperatingCommissionFlatAmount,

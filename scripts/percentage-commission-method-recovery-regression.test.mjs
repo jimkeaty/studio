@@ -20,6 +20,14 @@ test('percentage selection clears the prior flat amount and schedules a percenta
   assert.match(form, /warrantyPaidBy, commissionMode\]/);
 });
 
+test('flat-dollar files reopen with the saved exact GCI rather than a legacy percentage field', () => {
+  assert.match(form, /resolveSavedFlatDollarCommission/);
+  assert.match(form, /const resolvedFlatDollarCommission = savedFlatDollarMethod/);
+  assert.match(form, /sellerPayingBuyerAgent: resolvedSellerPayingBuyerAgent/);
+  assert.match(form, /commissionFlatAmount: resolvedFlatDollarCommission/);
+  assert.match(form, /retained their percentage in sellerPayingBuyerAgent/);
+});
+
 test('all operational edit routes normalize an explicit percentage selection before saving', () => {
   for (const [name, source] of [
     ['agent transaction route', agentRoute],

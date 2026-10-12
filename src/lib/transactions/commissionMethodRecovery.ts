@@ -4,6 +4,28 @@ import { calculatePercentageGrossCommission } from '@/lib/transactions/percentag
 type TransactionFinancials = Record<string, any>;
 
 /**
+ * Returns the saved exact-dollar commission for a transaction whose selected
+ * method is flat_dollar. This keeps a legacy percentage field from being
+ * mistaken for the flat dollar amount when the unified editor is reopened.
+ */
+export function resolveSavedFlatDollarCommission(transaction: TransactionFinancials): number | '' {
+  const candidates = [
+    transaction.commissionFlatAmount,
+    transaction.gci,
+    transaction.splitSnapshot?.grossCommission,
+    transaction.commission,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === '' || candidate === null || candidate === undefined) continue;
+    const amount = Number(candidate);
+    if (Number.isFinite(amount) && amount >= 0) return amount;
+  }
+
+  return '';
+}
+
+/**
  * Replaces a previously selected flat-dollar commission with a percentage-based
  * gross commission when an authorized editor explicitly changes the method.
  *

@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizePercentageCommissionMethod } from '../src/lib/transactions/commissionMethodRecovery';
+import {
+  normalizePercentageCommissionMethod,
+  resolveSavedFlatDollarCommission,
+} from '../src/lib/transactions/commissionMethodRecovery';
+
+test('a saved flat-dollar GCI takes precedence over a legacy buyer-agent percentage on reopen', () => {
+  const savedFlatCommission = resolveSavedFlatDollarCommission({
+    commissionCalculationMethod: 'flat_dollar',
+    commissionFlatAmount: 7_847,
+    gci: 7_847,
+    sellerPayingBuyerAgent: 2.9,
+    commissionPercent: 2.9,
+  });
+
+  assert.equal(savedFlatCommission, 7_847);
+});
+
+test('the saved GCI remains a recovery fallback for flat-dollar files without a dedicated amount', () => {
+  assert.equal(resolveSavedFlatDollarCommission({ gci: 5_460, commission: 3 }), 5_460);
+});
 
 test('switching a closed transaction from flat-dollar to percentage replaces the stale flat GCI', () => {
   const current = {
