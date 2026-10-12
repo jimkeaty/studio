@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { resolveCommissionBase } from '../src/lib/commissions';
 import { calculatePercentageGrossCommission } from '../src/lib/transactions/percentageGrossCommission';
+import { hasExplicitCommissionBaseOverride } from '../src/lib/transactions/commissionBaseHydration';
 
 test('closed listing commission uses the sale price instead of the historical list price', () => {
   const base = resolveCommissionBase({
@@ -23,6 +24,11 @@ test('an explicit concession-adjusted commission base remains authoritative', ()
   });
 
   assert.equal(base, 90_000);
+  assert.equal(hasExplicitCommissionBaseOverride({
+    status: 'closed',
+    salePrice: 93_000,
+    commissionBasePrice: 90_000,
+  }), true);
 });
 
 test('an active listing without a sale price still estimates from its list price', () => {

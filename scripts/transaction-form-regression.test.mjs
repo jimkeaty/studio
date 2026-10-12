@@ -28,6 +28,7 @@ const historicalRollupRouteSource = readFileSync(resolve(root, 'src/app/api/cron
 const productionCreditSource = readFileSync(resolve(root, 'src/lib/transactions/resolveProductionCredit.ts'), 'utf8');
 const bonusHelperSource = readFileSync(resolve(root, 'src/lib/transactions/resolveAgentBonusPassThrough.ts'), 'utf8');
 const coAgentAllocationSource = readFileSync(resolve(root, 'src/lib/transactions/syncCoAgentAllocations.ts'), 'utf8');
+const commissionBaseHydrationSource = readFileSync(resolve(root, 'src/lib/transactions/commissionBaseHydration.ts'), 'utf8');
 
 test('new buyer transactions default to the editable $395 compliance fee', () => {
   assert.match(formSource, /txComplianceFee: initialClosingType === 'buyer' \? 'yes' : ''/);
@@ -140,6 +141,12 @@ test('legacy finalized commission aliases hydrate the earnings breakdown GCI', (
   assert.match(formSource, /const resolvedAgentDollar = tx\.agentDollar \|\| tx\.splitSnapshot\?\.agentNetCommission \|\| tx\.splitSnapshot\?\.agentDollar \|\| tx\.agentNetCommission \|\| tx\.agentCommission \|\| ''/);
   assert.match(formSource, /gci: resolvedGci/);
   assert.match(formSource, /agentDollar: resolvedAgentDollar/);
+});
+test('a saved concession-adjusted commission base is not overwritten by editor auto-fill after reopening', () => {
+  assert.match(formSource, /import \{ hasExplicitCommissionBaseOverride \} from '@\/lib\/transactions\/commissionBaseHydration';/);
+  assert.match(formSource, /cbpManuallyEdited\.current = hasExplicitCommissionBaseOverride\(\{/);
+  assert.match(commissionBaseHydrationSource, /commissionBasePrice: null/);
+  assert.match(commissionBaseHydrationSource, /Math\.abs\(savedBase - automaticBase\) > 0\.005/);
 });
 
 test('a legacy zero GCI is recalculated from saved commission base and rate before split-dollar inference', () => {

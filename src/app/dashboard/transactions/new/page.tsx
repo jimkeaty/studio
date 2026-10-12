@@ -45,6 +45,7 @@ import { optionalSelect, optionalStringArray } from '@/lib/transactions/optional
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { resolveSavedFlatDollarCommission } from '@/lib/transactions/commissionMethodRecovery';
 import { resolveCooperatingCommissionForEditor } from '@/lib/transactions/cooperatingCommission';
+import { hasExplicitCommissionBaseOverride } from '@/lib/transactions/commissionBaseHydration';
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2482,6 +2483,15 @@ export default function AddTransactionPage() {
         // files intentionally retain zero broker economics and are excluded.
         const resolvedSalePrice = tx.salePrice || tx.finalSalePrice || tx.closedSalePrice || '';
         const resolvedCommissionBasePrice = tx.commissionBasePrice || resolvedSalePrice || '';
+        // The editor auto-fills the base from sale/list price only for ordinary
+        // transactions. A saved lower base is a deliberate concession-adjusted
+        // commission input and must not be overwritten after reopening.
+        cbpManuallyEdited.current = hasExplicitCommissionBaseOverride({
+          status: tx.status || tx.listingStatus,
+          salePrice: Number(resolvedSalePrice) || null,
+          listPrice: Number(tx.listPrice) || null,
+          commissionBasePrice: Number(resolvedCommissionBasePrice) || null,
+        });
         const resolvedCommissionPercent = tx.commissionPercent || tx.sellerCommissionPct || '';
         const resolvedBrokerGci = tx.brokerGci || tx.splitSnapshot?.companyRetained || tx.companyRetained || '';
         const resolvedAgentDollar = tx.agentDollar || tx.splitSnapshot?.agentNetCommission || tx.splitSnapshot?.agentDollar || tx.agentNetCommission || tx.agentCommission || '';
