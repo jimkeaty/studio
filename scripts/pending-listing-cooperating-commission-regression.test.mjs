@@ -65,3 +65,10 @@ test('legacy buyer-side seller-paid commission remains outside the new listing-s
   assert.match(form, /delete valuesForSave\.cooperatingAgentCommissionMethod/);
   assert.match(auditHelper, /blank form defaults can never erase buyer data/);
 });
+
+test('buyer-side flat-dollar GCI never hydrates or validates as a listing cooperating percentage', () => {
+  assert.match(form, /const hasListingSideCooperatingOffer = \['listing', 'dual'\]\.includes\(sideResolution\.side \|\| ''\)/);
+  assert.match(form, /never hydrate that amount into this hidden listing-only percentage/);
+  assert.match(form, /const isListingOrDual = data\.closingType === 'listing' \|\| data\.closingType === 'dual'/);
+  assert.match(form, /data\.isPassThrough \|\| !isListingOrDual \|\| data\.cooperatingAgentCommissionMethod !== 'percentage'/);
+});

@@ -570,9 +570,9 @@ const schema = z.object({
   sellerPayingListingAgent: z.coerce.number().min(0).optional().or(z.literal('')),
   sellerPayingListingAgentUnknown: z.boolean().optional(),
   cooperatingAgentCommissionMethod: optionalCooperatingCommissionMethod,
-  // A legacy listing may carry an old dollar value in this percentage field.
-  // The sibling-aware rule below keeps the normal 0–100% rule, while allowing
-  // a pass-through to save and discard this irrelevant legacy value.
+  // A legacy file may carry an old dollar value in this percentage field. The
+  // sibling-aware rule below validates it only for an active percentage-based
+  // listing/dual cooperating-agent offer.
   cooperatingAgentCommissionPercent: z.coerce.number().min(0).optional().or(z.literal('')),
   cooperatingAgentCommissionFlatAmount: z.coerce.number().min(0).optional().or(z.literal('')),
   // Legacy mirror. New listing-side edits use the dedicated fields above.
@@ -651,7 +651,8 @@ const schema = z.object({
   { message: 'Primary and co-agent split percentages must be valid values from 0 to 100 and total 100%.', path: ['coAgentSplitPercent'] }
 ).refine(
   (data) => {
-    if (data.isPassThrough) return true;
+    const isListingOrDual = data.closingType === 'listing' || data.closingType === 'dual';
+    if (data.isPassThrough || !isListingOrDual || data.cooperatingAgentCommissionMethod !== 'percentage') return true;
     const value = data.cooperatingAgentCommissionPercent;
     return value === '' || value === undefined || Number(value) <= 100;
   },
@@ -2506,16 +2507,27 @@ export default function AddTransactionPage() {
           ? resolvedFlatDollarCommission
           : (tx.sellerPayingBuyerAgent ?? '');
 
-        const resolvedCooperatingCommissionMethod = tx.cooperatingAgentCommissionMethod === 'flat_dollar'
-          ? 'flat_dollar'
-          : tx.cooperatingAgentCommissionMethod === 'percentage'
-            ? 'percentage'
-            : tx.commissionMode === 'flat' ? 'flat_dollar' : 'percentage';
-        const legacyCooperatingValue = tx.sellerPayingBuyerAgent ?? '';
-        const resolvedCooperatingCommissionPercent = tx.cooperatingAgentCommissionPercent ??
-          (resolvedCooperatingCommissionMethod === 'percentage' ? legacyCooperatingValue : '');
-        const resolvedCooperatingCommissionFlatAmount = tx.cooperatingAgentCommissionFlatAmount ??
-          (resolvedCooperatingCommissionMethod === 'flat_dollar' ? legacyCooperatingValue : '');
+        // This compensation offer applies only to listing/dual files. A buyer
+        // file can use sellerPayingBuyerAgent as its own gross-commission input;
+        // never hydrate that amount into this hidden listing-only percentage
+        // field, or form validation could misread a saved flat GCI as 7,847%.
+        const hasListingSideCooperatingOffer = ['listing', 'dual'].includes(sideResolution.side || '');
+        const resolvedCooperatingCommissionMethod = hasListingSideCooperatingOffer
+          ? (tx.cooperatingAgentCommissionMethod === 'flat_dollar'
+            ? 'flat_dollar'
+            : tx.cooperatingAgentCommissionMethod === 'percentage'
+              ? 'percentage'
+              : tx.commissionMode === 'flat' ? 'flat_dollar' : 'percentage')
+          : 'percentage';
+        const legacyCooperatingValue = hasListingSideCooperatingOffer ? (tx.sellerPayingBuyerAgent ?? '') : '';
+        const resolvedCooperatingCommissionPercent = hasListingSideCooperatingOffer
+          ? (tx.cooperatingAgentCommissionPercent ??
+            (resolvedCooperatingCommissionMethod === 'percentage' ? legacyCooperatingValue : ''))
+          : '';
+        const resolvedCooperatingCommissionFlatAmount = hasListingSideCooperatingOffer
+          ? (tx.cooperatingAgentCommissionFlatAmount ??
+            (resolvedCooperatingCommissionMethod === 'flat_dollar' ? legacyCooperatingValue : ''))
+          : '';
 
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
