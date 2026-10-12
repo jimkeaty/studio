@@ -44,7 +44,7 @@ import { normalizeTransactionVersion } from '@/lib/transactions/transactionVersi
 import { optionalSelect, optionalStringArray } from '@/lib/transactions/optionalFormValues';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { resolveSavedFlatDollarCommission } from '@/lib/transactions/commissionMethodRecovery';
-
+import { resolveCooperatingCommissionForEditor } from '@/lib/transactions/cooperatingCommission';
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2512,22 +2512,10 @@ export default function AddTransactionPage() {
         // never hydrate that amount into this hidden listing-only percentage
         // field, or form validation could misread a saved flat GCI as 7,847%.
         const hasListingSideCooperatingOffer = ['listing', 'dual'].includes(sideResolution.side || '');
-        const resolvedCooperatingCommissionMethod = hasListingSideCooperatingOffer
-          ? (tx.cooperatingAgentCommissionMethod === 'flat_dollar'
-            ? 'flat_dollar'
-            : tx.cooperatingAgentCommissionMethod === 'percentage'
-              ? 'percentage'
-              : tx.commissionMode === 'flat' ? 'flat_dollar' : 'percentage')
-          : 'percentage';
-        const legacyCooperatingValue = hasListingSideCooperatingOffer ? (tx.sellerPayingBuyerAgent ?? '') : '';
-        const resolvedCooperatingCommissionPercent = hasListingSideCooperatingOffer
-          ? (tx.cooperatingAgentCommissionPercent ??
-            (resolvedCooperatingCommissionMethod === 'percentage' ? legacyCooperatingValue : ''))
-          : '';
-        const resolvedCooperatingCommissionFlatAmount = hasListingSideCooperatingOffer
-          ? (tx.cooperatingAgentCommissionFlatAmount ??
-            (resolvedCooperatingCommissionMethod === 'flat_dollar' ? legacyCooperatingValue : ''))
-          : '';
+        const cooperatingCommissionForEditor = resolveCooperatingCommissionForEditor(
+          tx,
+          hasListingSideCooperatingOffer,
+        );
 
         const fieldMap: Record<string, unknown> = {
           agentId: tx.agentId || effectiveUid || '',
@@ -2552,9 +2540,9 @@ export default function AddTransactionPage() {
           sellerPayingListingAgent: resolvedSellerPayingListingAgent,
           sellerPayingListingAgentUnknown: Boolean(tx.sellerPayingListingAgentUnknown),
           sellerPayingBuyerAgent: resolvedSellerPayingBuyerAgent,
-          cooperatingAgentCommissionMethod: resolvedCooperatingCommissionMethod as any,
-          cooperatingAgentCommissionPercent: resolvedCooperatingCommissionPercent,
-          cooperatingAgentCommissionFlatAmount: resolvedCooperatingCommissionFlatAmount,
+          cooperatingAgentCommissionMethod: cooperatingCommissionForEditor.method as any,
+          cooperatingAgentCommissionPercent: cooperatingCommissionForEditor.percent,
+          cooperatingAgentCommissionFlatAmount: cooperatingCommissionForEditor.flatAmount,
           // Historical listing files may carry their finalized commission under
           // `commission` or `grossCommission` rather than the unified `gci` field.
           // Hydrate those aliases so the editable commission values—and the

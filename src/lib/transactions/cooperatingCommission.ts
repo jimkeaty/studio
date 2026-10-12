@@ -28,19 +28,67 @@ function asNumber(value: unknown, maximum?: number): number | null {
 }
 
 function resolveMethod(source: TransactionLike): CooperatingCommissionMethod {
+  const storedPercent = asNumber(source.cooperatingAgentCommissionPercent);
+  const storedFlatAmount = asNumber(source.cooperatingAgentCommissionFlatAmount);
+  const legacyOfferValue = asNumber(source.sellerPayingBuyerAgent);
+  // A valid percentage can never exceed 100. Older files sometimes stored an
+  // exact-dollar cooperating offer in the percentage alias before this field
+  // had an explicit method. Treat that persisted shape as flat dollars even
+  // when a later legacy save defaulted its method to "percentage".
+  if (
+    (storedFlatAmount !== null && storedFlatAmount > 0) ||
+    (storedPercent !== null && storedPercent > 100) ||
+    (legacyOfferValue !== null && legacyOfferValue > 100)
+  ) {
+    return 'flat_dollar';
+  }
   if (source.cooperatingAgentCommissionMethod === 'flat_dollar') return 'flat_dollar';
   if (source.cooperatingAgentCommissionMethod === 'percentage') return 'percentage';
   // Older records used the global commission mode for this one legacy value.
-  return source.commissionMode === 'flat' ? 'flat_dollar' : 'percentage';
+  return source.commissionMode === 'flat' || source.commissionCalculationMethod === 'flat_dollar'
+    ? 'flat_dollar'
+    : 'percentage';
 }
 
 function resolveValues(source: TransactionLike) {
   const method = resolveMethod(source);
+  const storedPercent = asNumber(source.cooperatingAgentCommissionPercent);
+  const storedFlatAmount = asNumber(source.cooperatingAgentCommissionFlatAmount);
   const legacy = asNumber(source.sellerPayingBuyerAgent);
   return {
     method,
-    percent: asNumber(source.cooperatingAgentCommissionPercent, 100) ?? (method === 'percentage' ? legacy : null),
-    flatAmount: asNumber(source.cooperatingAgentCommissionFlatAmount) ?? (method === 'flat_dollar' ? legacy : null),
+    percent: method === 'percentage'
+      ? asNumber(source.cooperatingAgentCommissionPercent, 100) ?? asNumber(legacy, 100)
+      : null,
+    flatAmount: method === 'flat_dollar'
+      ? storedFlatAmount ?? storedPercent ?? legacy
+      : null,
+  };
+}
+
+/**
+ * Hydrates the listing-side cooperating-agent controls without ever using a
+ * buyer-side GCI as an offer percentage. This is shared with the unified
+ * editor so Agent, Staff, TC, Admin, and Accounting all get the same legacy
+ * recovery behavior.
+ */
+export function resolveCooperatingCommissionForEditor(
+  source: TransactionLike,
+  hasListingSideCooperatingOffer: boolean,
+) {
+  if (!hasListingSideCooperatingOffer) {
+    return {
+      method: 'percentage' as CooperatingCommissionMethod,
+      percent: '',
+      flatAmount: '',
+    };
+  }
+
+  const values = resolveValues(source);
+  return {
+    method: values.method,
+    percent: values.percent ?? '',
+    flatAmount: values.flatAmount ?? '',
   };
 }
 
