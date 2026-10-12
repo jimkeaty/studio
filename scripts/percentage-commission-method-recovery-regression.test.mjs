@@ -13,6 +13,8 @@ const intakeRoute = read('src/app/api/tc/route.ts');
 
 test('percentage selection clears the prior flat amount and schedules a percentage GCI recalculation', () => {
   assert.match(form, /form\.setValue\('commissionCalculationMethod', next === 'flat' \? 'flat_dollar' : 'percentage'\)/);
+  assert.match(form, /profileRecalculationRequested\.current = true/);
+  assert.match(form, /commissionManualOverride\.current = false/);
   assert.match(form, /form\.setValue\('commissionFlatAmount', '' as any\)/);
   assert.match(form, /form\.setValue\('gci', '' as any\)/);
   assert.match(form, /warrantyPaidBy, commissionMode\]/);
@@ -30,6 +32,14 @@ test('all operational edit routes normalize an explicit percentage selection bef
 
   assert.match(tcRoute, /normalizePercentageCommissionMethod\(\{\}, intake\)/);
   assert.match(intakeRoute, /normalizePercentageCommissionMethod\(\{\}, body\)/);
+});
+
+test('an explicit percentage recovery clears only a prior flat override and lets the calculated split win', () => {
+  assert.match(adminRoute, /updates\.commissionOverridden === false\s*\? false/);
+  assert.match(adminRoute, /hasDirectSplitChange && !isPassThrough && updates\.commissionOverridden !== false/);
+  assert.match(staffQueueRoute, /allowed\.commissionOverridden !== false/);
+  assert.match(tcRoute, /txSyncUpdate\.commissionOverridden !== false/);
+  assert.match(agentRoute, /updates\.commissionOverridden === false\s*\? false/);
 });
 
 test('TC intake persists the selected commission method and flat amount separately', () => {

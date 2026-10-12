@@ -651,7 +651,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         // A manual agent/broker split must survive the same save as a gross
         // commission correction. Apply it after any profile-based calculation
         // so TC never sees their exact split silently revert.
-        if (!isPassThrough) mergeOperationalDirectSplit(currentTxForUpdate, txSyncUpdate);
+        if (!isPassThrough && txSyncUpdate.commissionOverridden !== false) {
+          mergeOperationalDirectSplit(currentTxForUpdate, txSyncUpdate);
+        }
         try {
           const versionedTransactionRef = adminDb.collection('transactions').doc(linkedTxId);
           const versionedTransactionSnap = await versionedTransactionRef.get();
@@ -1252,7 +1254,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             ...mergedPayload,
             updatedAt: now,
           });
-          if (existingData.commissionOverridden) {
+          if (existingData.commissionOverridden && updatePayload.commissionOverridden !== false) {
             // Strip all commission-related fields from the update — keep what's saved
             const commissionFields = [
               'splitSnapshot', 'creditSnapshot', 'commission', 'grossCommission',

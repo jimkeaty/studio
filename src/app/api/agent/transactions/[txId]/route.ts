@@ -419,7 +419,9 @@ export async function PATCH(
     const manualGciOverride = updates.commissionCalculationMethod === 'percentage'
       ? false
       : updates.manualGciOverride === true || txData.manualGciOverride === true;
-    const manualDollarSplitOverride = updates.commissionOverridden === true || txData.commissionOverridden === true;
+    const manualDollarSplitOverride = updates.commissionOverridden === false
+      ? false
+      : updates.commissionOverridden === true || txData.commissionOverridden === true;
     if (commissionFieldsChanged) {
       try {
         const mergedForCalc = { ...txData, ...updates };

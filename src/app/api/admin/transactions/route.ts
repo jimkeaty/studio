@@ -605,7 +605,9 @@ export async function PATCH(req: NextRequest) {
       String(effectiveTransaction.dealSource || '').toLowerCase() === 'pass_through',
     );
     const hasManualCommissionOverride =
-      updates.commissionOverridden === true || existingData?.commissionOverridden === true;
+      updates.commissionOverridden === false
+        ? false
+        : updates.commissionOverridden === true || existingData?.commissionOverridden === true;
     const COMMISSION_CALCULATION_FIELDS = new Set([
       'agentId', 'commission', 'gci', 'commissionPercent', 'commissionBasePrice',
       'commissionCalculationMethod', 'commissionFlatAmount', 'salePrice',
@@ -662,7 +664,7 @@ export async function PATCH(req: NextRequest) {
     // recalculation. This is the same persistence contract used by Staff and TC
     // queues: the entered operational values win for this save and retain the
     // separate agent-paid fee deduction in the displayed snapshot.
-    if (hasDirectSplitChange && !isPassThrough) {
+    if (hasDirectSplitChange && !isPassThrough && updates.commissionOverridden !== false) {
       mergeOperationalDirectSplit(existingData || {}, updates);
     }
 

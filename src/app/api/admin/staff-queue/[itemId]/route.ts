@@ -414,7 +414,8 @@ export async function PATCH(
         // When staff manually edits agentPct/agentDollar/brokerPct/brokerGci
         // WITHOUT changing GCI, merge those values straight into splitSnapshot
         // so displayed values update without reverting to profile-based defaults.
-        const hasDirectSplitChange = Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
+        const hasDirectSplitChange = allowed.commissionOverridden !== false &&
+          Object.keys(txUpdates).some(k => DIRECT_SPLIT_FIELDS.has(k));
         if (hasDirectSplitChange && !isPassThrough) mergeOperationalDirectSplit(currentTx, allowed);
         enforcePassThroughFinancialPolicy(currentTx, allowed);
         const allocationSource = { ...currentTx, ...allowed };

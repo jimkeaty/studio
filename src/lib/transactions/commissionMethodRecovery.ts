@@ -20,9 +20,23 @@ export function normalizePercentageCommissionMethod(
     return null;
   }
 
+  const switchingFromFlatDollar =
+    String(current.commissionCalculationMethod || '').trim().toLowerCase() === 'flat_dollar' ||
+    String(current.commissionMode || '').trim().toLowerCase() === 'flat';
+
   updates.commissionCalculationMethod = 'percentage';
   updates.commissionFlatAmount = null;
   updates.manualGciOverride = false;
+  // A prior flat-dollar file may also have carried a broad manual split override.
+  // Once an authorized user explicitly chooses percentage mode, the current
+  // percentage and the agent's saved tier must be allowed to rebuild the payout.
+  // Do not clear an override on an ordinary percentage-mode save; that would
+  // erase an intentional manual broker/agent split.
+  if (switchingFromFlatDollar) {
+    updates.commissionOverridden = false;
+    updates.commissionOverriddenBy = null;
+    updates.commissionOverriddenAt = null;
+  }
 
   const effective = { ...current, ...updates };
   const commissionBasePrice = resolveCommissionBase({

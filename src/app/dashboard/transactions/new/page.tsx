@@ -1333,6 +1333,13 @@ export default function AddTransactionPage() {
       // Switching away from an exact-dollar commission is intentional. Clear the
       // former flat amount and GCI so the percentage calculation below becomes
       // the one value sent to every operational save route.
+      // A former flat-rate file can also carry a saved manual broker/agent split.
+      // Clear that saved-mode state before the percentage GCI is recalculated so
+      // the profile tier—not the former flat allocation—supplies the payout.
+      profileRecalculationRequested.current = true;
+      commissionManualOverride.current = false;
+      editCommissionOverride.current = false;
+      setSavedTeamSnapshotPreview(null);
       form.setValue('commissionFlatAmount', '' as any);
       form.setValue('gci', '' as any);
     }

@@ -26,6 +26,9 @@ test('switching a closed transaction from flat-dollar to percentage replaces the
   assert.equal(updates.commissionCalculationMethod, 'percentage');
   assert.equal(updates.commissionFlatAmount, null);
   assert.equal(updates.manualGciOverride, false);
+  assert.equal(updates.commissionOverridden, false);
+  assert.equal(updates.commissionOverriddenBy, null);
+  assert.equal(updates.commissionOverriddenAt, null);
   assert.equal(updates.gci, 5_460);
   assert.equal(updates.commission, 5_460);
 });
@@ -53,4 +56,23 @@ test('the helper does not change a transaction unless percentage mode was explic
 
   assert.equal(result, null);
   assert.deepEqual(updates, { commissionCalculationMethod: 'flat_dollar', gci: 4_000 });
+});
+
+test('ordinary percentage-mode manual splits remain intact', () => {
+  const updates: Record<string, any> = {
+    commissionCalculationMethod: 'percentage',
+    commissionOverridden: true,
+    agentPct: 80,
+    brokerPct: 20,
+  };
+
+  normalizePercentageCommissionMethod({
+    commissionCalculationMethod: 'percentage',
+    salePrice: 182_000,
+    commissionPercent: 3,
+  }, updates);
+
+  assert.equal(updates.commissionOverridden, true);
+  assert.equal(updates.agentPct, 80);
+  assert.equal(updates.brokerPct, 20);
 });
