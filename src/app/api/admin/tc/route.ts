@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike, isStaff } from '@/lib/auth/staffAccess';
 import { reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
+import { isArchivedTransaction } from '@/lib/transactions/archiveTransaction';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -139,7 +140,7 @@ export async function GET(req: NextRequest) {
         id: d.id,
         ...serializeFirestore(d.data()),
       }));
-    const intakes = dedupeTcQueueIntakes(rawIntakes);
+    const intakes = dedupeTcQueueIntakes(rawIntakes).filter((intake) => !isArchivedTransaction(intake));
 
     // Recently changed/reopened records lead the queue. Fall back to the
     // original submission time for historic items that predate queue activity.

@@ -10,6 +10,7 @@ import {
   type AccountingActor,
   type AccountingFieldState,
 } from '@/lib/transactions/accountingCloseout';
+import { isArchivedTransaction } from '@/lib/transactions/archiveTransaction';
 
 function tokenFrom(req: NextRequest) {
   const value = req.headers.get('Authorization') || '';
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
         const accounting = transaction.accountingCloseout as Record<string, any> | undefined;
         // A handoff is created only for a Closed transaction. Keep that workflow
         // invariant in the response in case a legacy record was later reopened.
-        if (String(transaction.status || '').toLowerCase() !== 'closed' || !accounting || !accounting.status) return null;
+        if (isArchivedTransaction(transaction) || String(transaction.status || '').toLowerCase() !== 'closed' || !accounting || !accounting.status) return null;
         const currentSnapshot = buildAccountingSnapshot(transaction, doc.id);
         const fieldOverrides = (accounting.fieldOverrides || {}) as Record<string, 'na'>;
         return {

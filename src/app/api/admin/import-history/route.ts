@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -189,6 +190,7 @@ export async function DELETE(req: NextRequest) {
       return jsonError(400, 'Missing or invalid type (transaction | mls | activity)');
     }
 
+    let archived = 0;
     let deleted = 0;
     const affectedAgentIds = new Set<string>();
     const affectedYears = new Set<number>();
@@ -213,31 +215,28 @@ export async function DELETE(req: NextRequest) {
           if (d.agentId) affectedAgentIds.add(String(d.agentId));
           if (d.year) affectedYears.add(Number(d.year));
         }
-        // Delete in Firestore batches
-        let fb = adminDb.batch();
-        let fc = 0;
         for (const doc of snap2.docs) {
-          fb.delete(doc.ref);
-          deleted++;
-          fc++;
-          if (fc >= 499) { await fb.commit(); fb = adminDb.batch(); fc = 0; }
+          const result = await archiveCanonicalTransaction(adminDb, doc.id, {
+            actor: { uid: decoded.uid, email: decoded.email || null },
+            reason: `Archived imported ${type} batch ${batchId}`,
+            context: `import_history:${batchId}`,
+          });
+          if (!result.alreadyArchived) archived++;
         }
-        if (fc > 0) await fb.commit();
       } else {
         for (const doc of snap.docs) {
           const d = doc.data();
           if (d.agentId) affectedAgentIds.add(String(d.agentId));
           if (d.year) affectedYears.add(Number(d.year));
         }
-        let fb = adminDb.batch();
-        let fc = 0;
         for (const doc of snap.docs) {
-          fb.delete(doc.ref);
-          deleted++;
-          fc++;
-          if (fc >= 499) { await fb.commit(); fb = adminDb.batch(); fc = 0; }
+          const result = await archiveCanonicalTransaction(adminDb, doc.id, {
+            actor: { uid: decoded.uid, email: decoded.email || null },
+            reason: `Archived imported ${type} batch ${batchId}`,
+            context: `import_history:${batchId}`,
+          });
+          if (!result.alreadyArchived) archived++;
         }
-        if (fc > 0) await fb.commit();
       }
 
       // Rebuild rollups for affected agents (non-fatal)
@@ -287,7 +286,7 @@ export async function DELETE(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, deleted });
+    return NextResponse.json({ ok: true, archived, deleted });
   } catch (err: any) {
     console.error('[api/admin/import-history DELETE]', err);
     return jsonError(500, err.message ?? 'Failed to reverse import batch');

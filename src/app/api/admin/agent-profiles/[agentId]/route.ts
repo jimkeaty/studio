@@ -7,7 +7,7 @@ import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getTeamDefaultTiers } from '@/lib/commissions/teamTemplates';
 import { centralParts } from '@/lib/attendance/rules';
 import { lifecycleYmd } from '@/lib/agents/lifecycle';
-
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
   if (!h.startsWith('Bearer ')) return null;
@@ -548,7 +548,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
   try {
-    await requireAdmin(req);
+    const decoded = await requireAdmin(req);
     const { agentId } = await context.params;
 
     const ref = adminDb.collection('agentProfiles').doc(agentId);
@@ -561,52 +561,49 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     const agentData = existing.data()!;
     const displayName = agentData.displayName || agentId;
 
-    // Check for existing transactions
-    const txSnap = await adminDb
-      .collection('transactions')
-      .where('agentId', '==', agentId)
-      .limit(1)
-      .get();
+    // Check primary and co-agent transaction history before allowing profile deletion.
+    const [txSnap, coAgentTxSnap] = await Promise.all([
+      adminDb.collection('transactions').where('agentId', '==', agentId).limit(1).get(),
+      adminDb.collection('transactions').where('coAgent.agentId', '==', agentId).limit(1).get(),
+    ]);
 
     // Parse query param to force delete even with transactions
     const url = new URL(req.url);
     const force = url.searchParams.get('force') === 'true';
 
-    if (!txSnap.empty && !force) {
+    if ((!txSnap.empty || !coAgentTxSnap.empty) && !force) {
       // Count total transactions
-      const txCountSnap = await adminDb
-        .collection('transactions')
-        .where('agentId', '==', agentId)
-        .get();
+      const [primaryTransactions, coAgentTransactions] = await Promise.all([
+        adminDb.collection('transactions').where('agentId', '==', agentId).get(),
+        adminDb.collection('transactions').where('coAgent.agentId', '==', agentId).get(),
+      ]);
+      const transactionCount = new Set([...primaryTransactions.docs, ...coAgentTransactions.docs].map((doc) => doc.id)).size;
 
       return NextResponse.json({
         ok: false,
-        error: `Cannot delete "${displayName}" — they have ${txCountSnap.size} transaction(s). Use force delete to also remove their transactions, or reassign them first.`,
-        transactionCount: txCountSnap.size,
+        error: `Cannot delete "${displayName}" — they have ${transactionCount} transaction(s). Use force delete to archive their transactions, or reassign them first.`,
+        transactionCount,
         requiresForce: true,
       }, { status: 409 });
     }
 
-    // If force delete, remove all related data
-    if (force && !txSnap.empty) {
-      // Delete transactions
-      const allTx = await adminDb
-        .collection('transactions')
-        .where('agentId', '==', agentId)
-        .get();
+    // If force delete, archive financial history before removing the profile.
+    // A force profile deletion must not permanently erase transaction records.
+    if (force && (!txSnap.empty || !coAgentTxSnap.empty)) {
+      const [primaryTransactions, coAgentTransactions] = await Promise.all([
+        adminDb.collection('transactions').where('agentId', '==', agentId).get(),
+        adminDb.collection('transactions').where('coAgent.agentId', '==', agentId).get(),
+      ]);
+      const allTx = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      for (const transaction of [...primaryTransactions.docs, ...coAgentTransactions.docs]) allTx.set(transaction.id, transaction);
 
-      let batch = adminDb.batch();
-      let count = 0;
-      for (const doc of allTx.docs) {
-        batch.delete(doc.ref);
-        count++;
-        if (count >= 499) {
-          await batch.commit();
-          batch = adminDb.batch();
-          count = 0;
-        }
+      for (const doc of allTx.values()) {
+        await archiveCanonicalTransaction(adminDb, doc.id, {
+          actor: { uid: decoded.uid, email: decoded.email || null },
+          reason: `Archived because agent profile ${displayName} was force-removed`,
+          context: 'agent_profile_force_delete',
+        });
       }
-      if (count > 0) await batch.commit();
     }
 
     // Delete activity records
@@ -672,8 +669,21 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       if (count > 0) await batch.commit();
     }
 
-    // Finally, delete the agent profile
-    await ref.delete();
+    // Finally, delete the agent profile and leave an administrative audit event.
+    await Promise.all([
+      ref.delete(),
+      adminDb.collection('adminAuditLog').add({
+        type: 'agent_profile_deleted',
+        createdAt: new Date().toISOString(),
+        actor: { uid: decoded.uid, email: decoded.email || null },
+        agentId,
+        displayName,
+        force,
+        reason: force
+          ? 'Agent profile force-removed after canonical transactions were archived'
+          : 'Agent profile removed with no linked transaction history',
+      }),
+    ]);
 
     return NextResponse.json({
       ok: true,

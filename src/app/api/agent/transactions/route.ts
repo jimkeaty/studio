@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
+import { isArchivedTransaction } from '@/lib/transactions/archiveTransaction';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -112,7 +113,9 @@ export async function GET(req: NextRequest) {
 
     // Normalize only the response shown in the ledger. This never writes a
     // legacy document; its raw fields remain unchanged in Firestore.
-    const transactions = Array.from(txMap.values()).map((transaction: any) => {
+    const transactions = Array.from(txMap.values())
+      .filter((transaction: any) => !isArchivedTransaction(transaction))
+      .map((transaction: any) => {
       const sideResolution = resolveTransactionSide(transaction);
       return {
         ...transaction,

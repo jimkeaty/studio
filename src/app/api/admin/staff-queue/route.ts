@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isStaff } from '@/lib/auth/staffAccess';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
+import { isArchivedTransaction } from '@/lib/transactions/archiveTransaction';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -87,6 +88,7 @@ export async function GET(req: NextRequest) {
           const txDoc = await adminDb.collection('transactions').doc(item.transactionId).get();
           if (txDoc.exists) {
             const tx = txDoc.data()!;
+            if (isArchivedTransaction(tx)) item.linkedTransactionArchived = true;
             if (!resolvedAddress) resolvedAddress = (tx.propertyAddress || tx.address || '').trim();
             if (salePrice == null) salePrice = tx.salePrice ?? null;
             if (!closingType) closingType = resolveTransactionSide(tx).side ?? tx.closingType ?? null;
@@ -124,22 +126,26 @@ export async function GET(req: NextRequest) {
         // Non-fatal: skip enrichment for this item
       }
     }));
+    // Exclude canonical archives even if a historic queue wrapper has not yet
+    // received its archive marker. The ledger remains the source of truth.
+    const visibleItems = (items as any[]).filter((item) => !isArchivedTransaction(item) && !item.linkedTransactionArchived);
+
     // Normalize: copy address → transactionAddress (or vice versa) so the list page always has a value
-    for (const item of items as any[]) {
+    for (const item of visibleItems) {
       if (!item.transactionAddress && item.address) item.transactionAddress = item.address;
       else if (!item.address && item.transactionAddress) item.address = item.transactionAddress;
     }
 
     // Sort: pending_review first, then in_progress, then completed/dismissed
     const order: Record<string, number> = { pending_review: 0, in_progress: 1, completed: 2, dismissed: 3 };
-    items.sort((a: any, b: any) => {
+    visibleItems.sort((a: any, b: any) => {
       const ao = order[a.status] ?? 99;
       const bo = order[b.status] ?? 99;
       if (ao !== bo) return ao - bo;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
 
-    return NextResponse.json({ ok: true, items });
+    return NextResponse.json({ ok: true, items: visibleItems });
   } catch (err: any) {
     return jsonError(500, err.message || 'Internal error');
   }

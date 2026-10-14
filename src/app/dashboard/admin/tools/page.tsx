@@ -188,7 +188,7 @@ export default function AdminToolsPage() {
   async function runBulkDeleteExecute() {
     if (!user) return;
     if (!bulkDeleteResult?.confirmed) { alert('Run the dry run first to confirm matches.'); return; }
-    if (!confirm(`This will permanently DELETE ${bulkDeleteResult.confirmed} transaction(s) from Firestore and rebuild rollups.\n\nAmbiguous (${bulkDeleteResult.ambiguous}) and not-found (${bulkDeleteResult.notFound}) rows will NOT be deleted.\n\nThis cannot be undone. Continue?`)) return;
+    if (!confirm(`This will ARCHIVE ${bulkDeleteResult.confirmed} duplicate transaction(s), retain their financial history and audit trail, and rebuild rollups.\n\nAmbiguous (${bulkDeleteResult.ambiguous}) and not-found (${bulkDeleteResult.notFound}) rows will not change. Continue?`)) return;
     setBulkDeleteMode('execute');
     try {
       const token = await getToken();
@@ -517,14 +517,14 @@ export default function AdminToolsPage() {
         </p>
       </div>
 
-      {/* Bulk Delete Duplicates */}
+      {/* Bulk Archive Duplicates */}
       <Card className="border-red-200">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-2">
               <Trash2 className="h-5 w-5 text-red-600" />
               <div>
-                <CardTitle className="text-base">Bulk Delete 60 Duplicate Groups (65 rows)</CardTitle>
+                <CardTitle className="text-base">Bulk Archive 60 Duplicate Groups (65 rows)</CardTitle>
                 <CardDescription className="mt-1">
                   Matches each DELETE row from the spreadsheet against live Firestore transactions by
                   agent + address + status + listing date. Runs a dry-run first so you can review
@@ -544,7 +544,7 @@ export default function AdminToolsPage() {
                 {bulkDeleteResult.ok ? <CheckCircle2 className="h-4 w-4 text-blue-600" /> : <AlertTriangle className="h-4 w-4" />}
                 <AlertTitle className={bulkDeleteResult.ok ? 'text-blue-800' : ''}>
                   {bulkDeleteResult.ok
-                    ? bulkDeleteResult.mode === 'EXECUTE' ? 'Delete Complete' : 'Dry Run Complete'
+                    ? bulkDeleteResult.mode === 'EXECUTE' ? 'Archive Complete' : 'Dry Run Complete'
                     : 'Error'}
                 </AlertTitle>
                 <AlertDescription className={bulkDeleteResult.ok ? 'text-blue-700' : ''}>
@@ -619,7 +619,7 @@ export default function AdminToolsPage() {
               disabled={bulkDeleteMode !== 'idle' || !bulkDeleteResult?.confirmed}
               variant="destructive"
             >
-              {bulkDeleteMode === 'execute' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Deleting…</> : `Execute Delete (${bulkDeleteResult?.confirmed ?? 0} confirmed)`}
+              {bulkDeleteMode === 'execute' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Archiving…</> : `Archive confirmed duplicates (${bulkDeleteResult?.confirmed ?? 0})`}
             </Button>
           </div>
         </CardContent>

@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     // ── Validate input ────────────────────────────────────────────────────
     const body = await req.json();
-    const { ids } = body as { ids?: unknown };
+    const { ids, reason } = body as { ids?: unknown; reason?: unknown };
     if (!Array.isArray(ids) || ids.length === 0) {
       return jsonError(400, 'ids must be a non-empty array of transaction IDs');
     }
@@ -57,22 +58,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Delete in Firestore batches of 499 ────────────────────────────────
-    let deleted = 0;
-    let batch = adminDb.batch();
-    let batchCount = 0;
-
+    // ── Archive each canonical transaction with an immutable audit event ───
+    // A ledger selection is never a permission to hard-delete financial history.
+    let archived = 0;
     for (const id of idList) {
-      batch.delete(adminDb.collection('transactions').doc(id));
-      deleted++;
-      batchCount++;
-      if (batchCount >= 499) {
-        await batch.commit();
-        batch = adminDb.batch();
-        batchCount = 0;
-      }
+      const result = await archiveCanonicalTransaction(adminDb, id, {
+        actor: { uid: decoded.uid, email: decoded.email || null },
+        reason: String(reason || 'Archived from Transaction Ledger bulk selection'),
+        context: 'admin_bulk_selection',
+      });
+      if (!result.alreadyArchived) archived++;
     }
-    if (batchCount > 0) await batch.commit();
 
     // ── Rebuild rollups for affected agents (non-fatal) ───────────────────
     const years = Array.from(affectedYears);
@@ -90,7 +86,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      deleted,
+      archived,
+      deleted: 0,
       rollupRebuilt: rollupResults.filter(r => r.status === 'fulfilled').length,
     });
   } catch (err: any) {

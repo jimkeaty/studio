@@ -25,6 +25,7 @@ import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
+import { archiveCanonicalTransaction, isArchivedTransaction, restoreCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -92,6 +93,11 @@ export async function GET(req: NextRequest) {
         }
       }
     }
+
+    const archiveMode = searchParams.get('archive') || 'exclude';
+    transactions = transactions.filter((transaction: any) => (
+      archiveMode === 'only' ? isArchivedTransaction(transaction) : !isArchivedTransaction(transaction)
+    ));
 
     // Resolve legacy Buyer/Listing labels only in this GET response. The
     // canonical transaction document is not changed by viewing the ledger.
@@ -1102,29 +1108,38 @@ export async function DELETE(req: NextRequest) {
 
     const body = await req.json();
     const id = String(body.id || '').trim();
+    const action = String(body.action || 'archive').trim();
+    const reason = String(body.reason || '').trim();
     if (!id) return jsonError(400, 'Transaction id is required');
+    if (!reason) return jsonError(400, 'An archive or restoration reason is required');
 
     // Verify it exists
     const doc = await adminDb.collection('transactions').doc(id).get();
     if (!doc.exists) return jsonError(404, 'Transaction not found');
 
-    // Capture agentId + year before deleting
-    const txData = doc.data() as any;
-    const agentId = String(txData?.agentId || '').trim();
-    const txYear = Number(txData?.year || new Date().getFullYear());
+    const actor = { uid: decoded.uid, email: decoded.email || null };
+    if (action === 'restore') {
+      const restored = await restoreCanonicalTransaction(adminDb, id, { actor, reason, context: 'admin_ledger_restore' });
+      return NextResponse.json({ ok: true, restored: id, ...restored });
+    }
+    if (action !== 'archive') return jsonError(400, 'Unsupported transaction lifecycle action');
 
-    await adminDb.collection('transactions').doc(id).delete();
+    const archived = await archiveCanonicalTransaction(adminDb, id, {
+      actor,
+      reason,
+      context: 'admin_ledger_single_archive',
+    });
 
     // Rebuild rollup so leaderboards reflect the deletion
     try {
-      if (agentId && txYear) {
-        await rebuildAgentRollup(adminDb, agentId, txYear);
+      if (archived.year) {
+        await Promise.allSettled(archived.affectedAgentIds.map((agentId) => rebuildAgentRollup(adminDb, agentId, archived.year!)));
       }
     } catch (rollupErr: any) {
       console.warn('[api/admin/transactions DELETE] Rollup rebuild failed (non-fatal):', rollupErr?.message);
     }
 
-    return NextResponse.json({ ok: true, deleted: id });
+    return NextResponse.json({ ok: true, archived: id, ...archived });
   } catch (err: any) {
     console.error('[api/admin/transactions DELETE]', err);
     return jsonError(500, err.message || 'Internal Server Error');

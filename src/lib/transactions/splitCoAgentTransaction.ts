@@ -18,7 +18,7 @@ import { adminDb } from '@/lib/firebase/admin';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -307,8 +307,13 @@ export async function splitCoAgentTransaction(
     adminDb.collection('transactions').add(coPayload),
   ]);
 
-  // Delete the original combined transaction
-  await txRef.delete();
+  // Preserve the original combined transaction as an auditable archived source
+  // for the two replacement records rather than hard-deleting financial history.
+  await archiveCanonicalTransaction(adminDb, originalTxId, {
+    actor: { uid: 'system', name: 'SmartBroker system' },
+    reason: 'Replaced by two co-agent allocation records',
+    context: `co_agent_split:${primaryRef.id},${coRef.id}`,
+  });
 
   // ── Rebuild rollups ──────────────────────────────────────────────────────────
   await Promise.allSettled([

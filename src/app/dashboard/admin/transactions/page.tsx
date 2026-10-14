@@ -115,10 +115,11 @@ export default function AdminTransactionLedgerPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
 
-  // Delete confirmation
+  // Archive confirmation
   const [deleteTx, setDeleteTx] = useState<Transaction | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
 
   // Transfer dialog
   const [transferTx, setTransferTx] = useState<Transaction | null>(null);
@@ -143,6 +144,7 @@ export default function AdminTransactionLedgerPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkArchiveReason, setBulkArchiveReason] = useState('');
 
   // Duplicate finder
   const [dupFinderOpen, setDupFinderOpen] = useState(true);
@@ -354,6 +356,7 @@ export default function AdminTransactionLedgerPage() {
 
   const openDelete = (tx: Transaction) => {
     setDeleteTx(tx);
+    setArchiveReason('');
     setDeleteOpen(true);
   };
 
@@ -365,10 +368,10 @@ export default function AdminTransactionLedgerPage() {
       const res = await fetch('/api/admin/transactions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: deleteTx.id }),
+        body: JSON.stringify({ id: deleteTx.id, action: 'archive', reason: archiveReason }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete');
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to archive');
 
       setTransactions(prev => prev.filter(t => t.id !== deleteTx.id));
       setDeleteOpen(false);
@@ -403,12 +406,13 @@ export default function AdminTransactionLedgerPage() {
       const res = await fetch('/api/admin/transactions/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+        body: JSON.stringify({ ids: Array.from(selectedIds), reason: bulkArchiveReason }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Bulk delete failed');
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Bulk archive failed');
       setTransactions(prev => prev.filter(t => !selectedIds.has(t.id)));
       setSelectedIds(new Set());
+      setBulkArchiveReason('');
       setBulkDeleteOpen(false);
     } catch (err: any) {
       setPageError(err.message);
@@ -665,7 +669,7 @@ export default function AdminTransactionLedgerPage() {
             <div className="px-4 pb-4 space-y-3">
               <p className="text-xs text-amber-700 pb-1">
                 <strong>Legitimate duplicates</strong> (same agent listed &amp; sold, two agents on opposite sides, or same address sold in different years) — click <strong>Accept as Legitimate</strong> to hide the group.
-                {' '}<strong>True duplicates</strong> — use <strong>Delete</strong> on the row(s) to remove.
+                {' '}<strong>True duplicates</strong> — use <strong>Archive</strong> on the row(s) to remove them from active ledger views while preserving recovery history.
               </p>
               {visibleDupGroups.map((group) => (
                 <div key={group.key} className="rounded-md border border-amber-200 bg-white dark:bg-amber-950/20 overflow-hidden">
@@ -722,7 +726,7 @@ export default function AdminTransactionLedgerPage() {
                                 className="text-red-600 hover:underline text-[11px]"
                                 onClick={() => { setDeleteTx(tx); setDeleteOpen(true); }}
                               >
-                                Delete
+                                Archive
                               </button>
                             </div>
                           </td>
@@ -866,7 +870,7 @@ export default function AdminTransactionLedgerPage() {
                   <X className="h-3 w-3 mr-1" /> Clear
                 </Button>
                 <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => setBulkDeleteOpen(true)}>
-                  <Trash2 className="h-3 w-3 mr-1" /> Delete Selected
+                  <Trash2 className="h-3 w-3 mr-1" /> Archive Selected
                 </Button>
               </div>
             </div>
@@ -930,7 +934,7 @@ export default function AdminTransactionLedgerPage() {
                           <ArrowRightLeft className="h-3 w-3 mr-1" /> Transfer
                         </Button>
                         <Button variant="ghost" size="sm" className="h-7 flex-1 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDelete(t); }}>
-                          <Trash2 className="h-3 w-3 mr-1" /> Delete
+                          <Trash2 className="h-3 w-3 mr-1" /> Archive
                         </Button>
                       </div>
                     </div>
@@ -1192,7 +1196,7 @@ export default function AdminTransactionLedgerPage() {
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openTransfer(t); }} title="Transfer to another agent">
                               <ArrowRightLeft className="h-3.5 w-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDelete(t); }} title="Delete">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDelete(t); }} title="Archive transaction">
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -1341,13 +1345,13 @@ export default function AdminTransactionLedgerPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── DELETE CONFIRMATION ── */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      {/* ── ARCHIVE CONFIRMATION ── */}
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setArchiveReason(''); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Transaction</DialogTitle>
+            <DialogTitle>Archive Transaction</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this transaction? This action cannot be undone.
+              This removes the transaction from working ledgers and queues while preserving the canonical record, documents, financial snapshots, and an audit trail. It can be restored by an administrator.
             </DialogDescription>
           </DialogHeader>
           {deleteTx && (
@@ -1356,38 +1360,46 @@ export default function AdminTransactionLedgerPage() {
               <p className="text-sm text-muted-foreground">
                 {deleteTx.agentDisplayName} · {formatCurrency(deleteTx.splitSnapshot?.grossCommission ?? deleteTx.commission ?? 0)} GCI
               </p>
+              <div className="pt-2 space-y-1">
+                <Label htmlFor="archive-reason">Archive reason</Label>
+                <Textarea id="archive-reason" value={archiveReason} onChange={(event) => setArchiveReason(event.target.value)} placeholder="Example: confirmed duplicate import" />
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              <Trash2 className="mr-2 h-4 w-4" /> {deleting ? 'Deleting...' : 'Delete'}
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting || archiveReason.trim().length < 3}>
+              <Trash2 className="mr-2 h-4 w-4" /> {deleting ? 'Archiving...' : 'Archive'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── BULK DELETE DIALOG ── */}
-      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+      {/* ── BULK ARCHIVE DIALOG ── */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={(open) => { setBulkDeleteOpen(open); if (!open) setBulkArchiveReason(''); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4 text-destructive" /> Delete {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}
+              <Trash2 className="h-4 w-4 text-destructive" /> Archive {selectedIds.size} Transaction{selectedIds.size !== 1 ? 's' : ''}
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete {selectedIds.size} selected transaction{selectedIds.size !== 1 ? 's' : ''}. This action cannot be undone.
+              This removes the selected transactions from working ledgers and queues but keeps their financial history and audit trail for recovery.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Agent rollups will be rebuilt automatically after deletion.
+              Agent rollups will be rebuilt automatically after archiving.
             </p>
+            <div className="space-y-1">
+              <Label htmlFor="bulk-archive-reason">Archive reason</Label>
+              <Textarea id="bulk-archive-reason" value={bulkArchiveReason} onChange={(event) => setBulkArchiveReason(event.target.value)} placeholder="Example: duplicate records replaced by canonical transaction" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting || bulkArchiveReason.trim().length < 3}>
               <Trash2 className="mr-2 h-4 w-4" />
-              {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} Transaction${selectedIds.size !== 1 ? 's' : ''}`}
+              {bulkDeleting ? 'Archiving…' : `Archive ${selectedIds.size} Transaction${selectedIds.size !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>

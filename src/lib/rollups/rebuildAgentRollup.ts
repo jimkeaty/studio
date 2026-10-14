@@ -38,6 +38,7 @@ import { getAnniversaryCycle, isInCycle } from '@/lib/agents/anniversaryCycle';
 import { isPassThroughTransaction } from '@/lib/transactions/isPassThroughTransaction';
 import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 import { getAgentBonusPassThrough } from '@/lib/transactions/resolveAgentBonusPassThrough';
+import { isArchivedTransaction } from '@/lib/transactions/archiveTransaction';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,7 @@ export async function rebuildAgentRollup(
 
   for (const doc of snap.docs) {
     const t = doc.data() as any;
+    if (isArchivedTransaction(t)) continue;
 
     // ── Calendar year filter (for leaderboard / performance stats) ──────────
     const txYear =
@@ -257,6 +259,7 @@ export async function rebuildAgentRollup(
       if (snap.docs.some(d => d.id === doc.id)) continue;
 
       const t = doc.data() as any;
+      if (isArchivedTransaction(t)) continue;
       const txYear =
         toYear((String(t.closingType || '').toLowerCase() === 'referral' ? t.referralFeeReceivedDate : null) ?? t.closedDate) ??
         toYear(t.contractDate) ??
@@ -310,6 +313,7 @@ export async function rebuildAgentRollup(
 
     for (const doc of memberSnap.docs) {
       const t = doc.data() as any;
+      if (isArchivedTransaction(t)) continue;
 
       // Only count closed transactions for tier progression
       const status = String(t.status || '').toLowerCase();

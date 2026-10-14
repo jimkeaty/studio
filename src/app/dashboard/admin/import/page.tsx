@@ -858,7 +858,7 @@ export default function BulkImportPage() {
 
   const handleBulkDelete = async () => {
     if (!user) return;
-    if (deleteConfirmText !== 'DELETE') return;
+    if (deleteConfirmText !== 'ARCHIVE') return;
     setDeleting(true);
     setPageError(null);
     try {
@@ -881,8 +881,8 @@ export default function BulkImportPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Delete failed');
-      const parts = [`Deleted ${data.deleted} transaction${data.deleted !== 1 ? 's' : ''}`];
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Archive failed');
+      const parts = [`Archived ${data.archived ?? 0} transaction${(data.archived ?? 0) !== 1 ? 's' : ''}`];
       if (data.agentsDeleted > 0) {
         parts.push(`${data.agentsDeleted} auto-created agent profile${data.agentsDeleted !== 1 ? 's' : ''} removed`);
       }
@@ -890,7 +890,7 @@ export default function BulkImportPage() {
       setShowDeletePanel(false);
       setDeleteConfirmText('');
     } catch (err: any) {
-      setPageError(err.message || 'Delete failed');
+      setPageError(err.message || 'Archive failed');
     } finally {
       setDeleting(false);
     }
@@ -1229,14 +1229,14 @@ export default function BulkImportPage() {
         </div>
       )}
 
-      {/* ── DANGER ZONE: Bulk Delete ──────────────────────────────────────── */}
+      {/* ── DANGER ZONE: Bulk Archive ─────────────────────────────────────── */}
       {step === 'upload' && (
         <Card className="border-red-500/20">
           <CardHeader className="cursor-pointer" onClick={() => setShowDeletePanel((v) => !v)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Trash2 className="h-5 w-5 text-red-500" />
-                <CardTitle className="text-base">Danger Zone: Bulk Delete Transactions</CardTitle>
+                <CardTitle className="text-base">Danger Zone: Bulk Archive Transactions</CardTitle>
               </div>
               <span className="text-sm text-muted-foreground">{showDeletePanel ? 'Hide' : 'Show'}</span>
             </div>
@@ -1246,13 +1246,13 @@ export default function BulkImportPage() {
             <CardContent className="space-y-4">
               {/* Scope */}
               <div>
-                <label className="block text-sm font-medium mb-1">What to delete</label>
+                <label className="block text-sm font-medium mb-1">What to archive</label>
                 <select
                   className="w-full border rounded-md px-3 py-2 text-sm bg-background"
                   value={deleteScope}
                   onChange={(e) => setDeleteScope(e.target.value)}
                 >
-                  <option value="batch_id">Delete a specific import batch (by date)</option>
+                  <option value="batch_id">Archive a specific import batch (by date)</option>
                   <option value="imported">All imported transactions (bulk imports only)</option>
                   <option value="source_and_year">Imported transactions for a specific year</option>
                   <option value="year">All transactions for a specific year</option>
@@ -1356,10 +1356,9 @@ export default function BulkImportPage() {
                   className="mt-1 h-4 w-4 rounded border-gray-300"
                 />
                 <label htmlFor="deleteAgents" className="text-sm">
-                  <span className="font-medium text-amber-800">Also delete auto-created agent profiles</span>
+                  <span className="font-medium text-amber-800">Also remove unused auto-created agent profiles</span>
                   <p className="text-xs text-amber-700 mt-0.5">
-                    Removes agent profiles that were auto-created during bulk import, but only if they have no remaining transactions.
-                    This prevents duplicates when you re-upload.
+                    Removes agent profiles that were auto-created during bulk import only when they have no transaction history. Archived transactions count as history and keep the profile protected.
                   </p>
                 </label>
               </div>
@@ -1367,24 +1366,24 @@ export default function BulkImportPage() {
               {/* Summary + confirm */}
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>This action cannot be undone</AlertTitle>
+                <AlertTitle>Archive imported transaction records</AlertTitle>
                 <AlertDescription>
-                  <p className="mb-2">You are about to delete: <strong>{deleteScopeLabel}</strong></p>
-                  <p className="text-sm mb-3">Type <strong>DELETE</strong> to confirm:</p>
+                  <p className="mb-2">You are about to archive: <strong>{deleteScopeLabel}</strong></p>
+                  <p className="text-sm mb-3">The records will leave active ledgers but retain their documents, financial data, and audit trail. Type <strong>ARCHIVE</strong> to confirm:</p>
                   <input
                     type="text"
                     className="w-full border rounded-md px-3 py-2 text-sm bg-background mb-3"
-                    placeholder="Type DELETE to confirm"
+                    placeholder="Type ARCHIVE to confirm"
                     value={deleteConfirmText}
                     onChange={(e) => setDeleteConfirmText(e.target.value)}
                   />
                   <Button
                     variant="destructive"
-                    disabled={deleteConfirmText !== 'DELETE' || deleting}
+                    disabled={deleteConfirmText !== 'ARCHIVE' || deleting}
                     onClick={handleBulkDelete}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    {deleting ? 'Deleting...' : 'Permanently Delete'}
+                    {deleting ? 'Archiving...' : 'Archive Transactions'}
                   </Button>
                 </AlertDescription>
               </Alert>

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 
 function getMonthFromDoc(data: any): number | null {
   // Try closedDate first, then contractDate, then listingDate
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { scope, year, month, deleteAutoCreatedAgents, batchId } = body;
+    const { scope, year, month, deleteAutoCreatedAgents, batchId, reason } = body;
 
     // scope: 'all' | 'imported' | 'year' | 'source_and_year' | 'batch_id'
     if (!scope) {
@@ -64,10 +65,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, deleted: 0, message: 'No matching transactions found.' });
     }
 
-    let deleted = 0;
+    let archived = 0;
     let skipped = 0;
-    let batch = adminDb.batch();
-    let batchCount = 0;
 
     for (const doc of snap.docs) {
       // If month filter is set, check the transaction's month
@@ -79,19 +78,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      batch.delete(doc.ref);
-      deleted++;
-      batchCount++;
-
-      if (batchCount >= 499) {
-        await batch.commit();
-        batch = adminDb.batch();
-        batchCount = 0;
-      }
-    }
-
-    if (batchCount > 0) {
-      await batch.commit();
+      const result = await archiveCanonicalTransaction(adminDb, doc.id, {
+        actor: { uid: decoded.uid, email: decoded.email || null },
+        reason: String(reason || `Archived from filtered ${scope} transaction cleanup`),
+        context: `admin_bulk_archive:${scope}`,
+      });
+      if (!result.alreadyArchived) archived++;
     }
 
     // ── Optionally delete auto-created agent profiles ──────────────────
@@ -123,10 +115,19 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < agentDocs.length; i++) {
           if (remainingTxChecks[i].empty) {
             agentBatch.delete(agentDocs[i].ref);
+            agentBatch.create(adminDb.collection('adminAuditLog').doc(), {
+              type: 'auto_created_agent_profile_deleted',
+              createdAt: new Date().toISOString(),
+              actor: { uid: decoded.uid, email: decoded.email || null },
+              agentId: agentDocs[i].data().agentId || agentDocs[i].id,
+              reason: 'Removed unused auto-created import profile after transaction archive cleanup',
+              context: `admin_bulk_archive:${scope}`,
+            });
             agentsDeleted++;
             agentBatchCount++;
 
-            if (agentBatchCount >= 499) {
+            // Each profile removal writes both a delete and an audit event.
+            if (agentBatchCount >= 249) {
               await agentBatch.commit();
               agentBatch = adminDb.batch();
               agentBatchCount = 0;
@@ -140,7 +141,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, deleted, skipped, agentsDeleted });
+    return NextResponse.json({ ok: true, archived, deleted: 0, skipped, agentsDeleted });
   } catch (err: any) {
     console.error('[bulk-delete]', err);
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });

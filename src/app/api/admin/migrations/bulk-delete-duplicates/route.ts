@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
+import { archiveCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
 
 // ─── Real DELETE entries from Manus_AUTO_DELETE_60.xlsx ──────────────────────
 // Format: [group, address, agent, status, listingDate | null, closedDate | null]
@@ -179,8 +180,9 @@ export async function POST(req: NextRequest) {
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : null;
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  let decoded: Awaited<ReturnType<typeof adminAuth.verifyIdToken>>;
   try {
-    const decoded = await adminAuth.verifyIdToken(token);
+    decoded = await adminAuth.verifyIdToken(token);
     if (!(await isAdminLike(decoded.uid))) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -335,26 +337,24 @@ export async function POST(req: NextRequest) {
   const notFound = results.filter(r => r.result === 'NOT_FOUND');
   const ambiguous = results.filter(r => r.result === 'AMBIGUOUS');
 
-  // Execute deletes + rebuild rollups
-  let deleted = 0;
+  // Execute archives + rebuild rollups. The historical spreadsheet provides a
+  // cleanup decision, not a reason to erase a financial record permanently.
+  let archived = 0;
   const rollupKeys = new Set<string>();
 
   if (execute && confirmed.length > 0) {
-    const BATCH_SIZE = 400;
-    for (let i = 0; i < confirmed.length; i += BATCH_SIZE) {
-      const batch = adminDb.batch();
-      const chunk = confirmed.slice(i, i + BATCH_SIZE);
-      for (const row of chunk) {
-        if (row.txId) {
-          batch.delete(adminDb.collection('transactions').doc(row.txId));
-          deleted++;
-          // Collect rollup keys
-          const agentId = row.txData?.agentId;
-          const year = row.txData?.year;
-          if (agentId && year) rollupKeys.add(`${agentId}:::${year}`);
+    for (const row of confirmed) {
+      if (row.txId) {
+        const result = await archiveCanonicalTransaction(adminDb, row.txId, {
+          actor: { uid: decoded.uid, email: decoded.email || null },
+          reason: `Approved duplicate cleanup: group ${row.group}`,
+          context: 'admin_duplicate_migration',
+        });
+        if (!result.alreadyArchived) archived++;
+        for (const agentId of result.affectedAgentIds) {
+          if (result.year) rollupKeys.add(`${agentId}:::${result.year}`);
         }
       }
-      await batch.commit();
     }
     // Rebuild rollups using the canonical helper
     for (const key of rollupKeys) {
@@ -370,7 +370,8 @@ export async function POST(req: NextRequest) {
     confirmed: confirmed.length,
     notFound: notFound.length,
     ambiguous: ambiguous.length,
-    deleted: execute ? deleted : 0,
+    archived: execute ? archived : 0,
+    deleted: 0,
     rollupsRebuilt: execute ? rollupKeys.size : 0,
     confirmedList: confirmed.map(r => ({
       group: r.group,

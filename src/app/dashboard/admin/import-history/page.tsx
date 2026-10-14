@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  *
  * Each row shows: type, date/time, record count, years covered,
  * sample agents, sample addresses, and a "Reverse Import" button
- * that deletes all records from that batch after a confirmation step.
+ * that archives transaction records (or deletes activity records) after a confirmation step.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -171,7 +171,8 @@ export default function ImportHistoryPage() {
   // ── Reverse import ────────────────────────────────────────────────────────
 
   const handleReverse = async () => {
-    if (!reverseTarget || !user || confirmText !== 'DELETE') return;
+    const confirmationWord = reverseTarget?.type === 'activity' ? 'DELETE' : 'ARCHIVE';
+    if (!reverseTarget || !user || confirmText !== confirmationWord) return;
     setReversing(true);
     setReverseError(null);
     try {
@@ -188,7 +189,9 @@ export default function ImportHistoryPage() {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Reverse failed');
       const typeLabel = TYPE_CONFIG[reverseTarget.type].label;
       setReverseSuccess(
-        `Successfully reversed ${typeLabel}: ${data.deleted} record${data.deleted !== 1 ? 's' : ''} deleted.`
+        reverseTarget.type === 'activity'
+          ? `Successfully reversed ${typeLabel}: ${data.deleted} record${data.deleted !== 1 ? 's' : ''} deleted.`
+          : `Successfully archived ${typeLabel}: ${data.archived ?? 0} transaction record${(data.archived ?? 0) !== 1 ? 's' : ''} removed from active ledgers and retained for recovery.`
       );
       setBatches(prev => prev.filter(b => b.batchId !== reverseTarget.batchId));
       setReverseTarget(null);
@@ -322,8 +325,7 @@ export default function ImportHistoryPage() {
         <Info className="h-4 w-4 text-amber-600" />
         <AlertTitle className="text-amber-800 dark:text-amber-300">About Reversing Imports</AlertTitle>
         <AlertDescription className="text-amber-700 dark:text-amber-400">
-          Reversing an import permanently deletes all records from that batch. For transaction and MLS
-          imports, agent leaderboard rollups are automatically rebuilt. This action cannot be undone.
+          Reversing a transaction or MLS import archives those records from active ledgers while preserving financial history and audit evidence. Activity imports are removed. Transaction and MLS rollups are automatically rebuilt.
         </AlertDescription>
       </Alert>
 
@@ -469,7 +471,7 @@ export default function ImportHistoryPage() {
                             }}
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            Reverse
+                            {batch.type === 'activity' ? 'Reverse' : 'Archive'}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -521,7 +523,7 @@ export default function ImportHistoryPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <Trash2 className="h-5 w-5" />
-              Reverse Import Batch
+              {reverseTarget?.type === 'activity' ? 'Reverse Activity Import' : 'Archive Import Batch'}
             </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-3 pt-2">
@@ -548,22 +550,23 @@ export default function ImportHistoryPage() {
                       )}
                     </div>
                     <p className="text-sm text-destructive font-medium">
-                      This will permanently delete all {reverseTarget.count.toLocaleString()} records
-                      from this import batch. This action cannot be undone.
+                      {reverseTarget.type === 'activity'
+                        ? `This will permanently delete all ${reverseTarget.count.toLocaleString()} activity records from this import batch.`
+                        : `This will archive all ${reverseTarget.count.toLocaleString()} transaction records from active ledgers while preserving them for recovery.`}
                     </p>
                     {(reverseTarget.type === 'transaction' || reverseTarget.type === 'mls') && (
                       <p className="text-xs text-muted-foreground">
-                        Agent leaderboard rollups will be automatically rebuilt after deletion.
+                        Agent leaderboard rollups will be automatically rebuilt after archiving.
                       </p>
                     )}
                     <div className="pt-1">
                       <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                        Type <strong>DELETE</strong> to confirm
+                        Type <strong>{reverseTarget.type === 'activity' ? 'DELETE' : 'ARCHIVE'}</strong> to confirm
                       </label>
                       <Input
                         value={confirmText}
                         onChange={e => setConfirmText(e.target.value)}
-                        placeholder="DELETE"
+                        placeholder={reverseTarget.type === 'activity' ? 'DELETE' : 'ARCHIVE'}
                         className="font-mono"
                         autoFocus
                       />
@@ -590,12 +593,12 @@ export default function ImportHistoryPage() {
             <Button
               variant="destructive"
               onClick={handleReverse}
-              disabled={confirmText !== 'DELETE' || reversing}
+              disabled={confirmText !== (reverseTarget?.type === 'activity' ? 'DELETE' : 'ARCHIVE') || reversing}
             >
               {reversing ? (
                 <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Reversing…</>
               ) : (
-                <><Trash2 className="h-4 w-4 mr-2" /> Reverse Import</>
+                <><Trash2 className="h-4 w-4 mr-2" /> {reverseTarget?.type === 'activity' ? 'Reverse Activity Import' : 'Archive Import'}</>
               )}
             </Button>
           </DialogFooter>
