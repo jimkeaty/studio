@@ -1,113 +1,80 @@
-# Smart Broker USA — Automated Backup System
+# Smart Broker USA — Firestore Backup and Recovery System
 
-## Overview
+## Live verification status
 
-Automated daily Firestore backups using Google Cloud's native scheduled backup feature. Backups are managed entirely by the Firestore service — no Cloud Scheduler, Cloud Functions, or custom scripts are required. The schedule runs continuously until explicitly deleted.
+**Verified in the Google Cloud Console on October 14, 2026.** No backup, retention, or point-in-time recovery setting was changed during this verification.
 
-## Schedule
+The live Firestore database has active scheduled backups and point-in-time recovery. The prior documentation understated the protection in place: it listed only daily backups and an unverified approximate run time.
 
-| Setting | Value |
+## Live protection policy
+
+| Protection | Live setting | What it provides |
+|---|---:|---|
+| Point-in-time recovery (PITR) | Enabled; **7 days** | Recover a database to a point in the last seven days, subject to Firestore’s recovery process. |
+| Daily scheduled backups | Enabled; **30-day retention** | One restorable daily backup per day, retained for 30 days. |
+| Weekly scheduled backups | Enabled; **Sunday; 98-day retention** | A longer-retained weekly recovery point. |
+| Firestore database | `(default)` | Production Smart Broker USA database. |
+| Project | `smart-broker-usa` | Google Cloud / Firebase production project. |
+| Backup location | `nam5` | US multi-region backup location shown in the console. |
+
+> **Important:** Google charges for both scheduled backup storage and PITR storage. The existing settings are already active; no new billing configuration was applied during the October 14 verification.
+
+## Current recovery evidence
+
+The console showed recent backups on consecutive days, including a backup created on **October 14, 2026 at 10:28:02 UTC**, expiring on **November 13, 2026 at 10:28:02 UTC**. The PITR panel reported an earliest available version time of **October 7, 2026 at 10:18:00 UTC**.
+
+This confirms the recovery service is currently creating and retaining backups. It does **not** retroactively recreate a transaction that was deleted before the relevant recovery window or backup availability.
+
+## Historical schedule reference
+
+The following schedule resource appears in previous project records. It was not independently revalidated by resource ID during the October 14 console inspection, so live settings above—not this historical identifier—are authoritative.
+
+| Field | Historical value |
 |---|---|
-| Frequency | Daily |
-| Approximate time | ~8:30 PM Central (20:30 UTC) |
-| Retention | 30 days (older backups auto-deleted by Google) |
-| Database | `(default)` |
-| Project | `smart-broker-usa` |
-| Location | `nam5` (US multi-region) |
-
-## Backup Schedule Resource
-
-| Field | Value |
-|---|---|
-| Schedule ID | `32017554-2cb3-4be9-843b-7c243caeb2f7` |
+| Daily schedule ID | `32017554-2cb3-4be9-843b-7c243caeb2f7` |
 | Full resource name | `projects/smart-broker-usa/databases/(default)/backupSchedules/32017554-2cb3-4be9-843b-7c243caeb2f7` |
-| Created | 2026-06-02T20:30:47 UTC |
-| Retention | 2592000s (30 days) |
-| Recurrence | `dailyRecurrence` |
+| Historical creation time | `2026-06-02T20:30:47Z` |
 
-## Where Backups Are Stored
+## Recovery boundaries
 
-Google Cloud-managed storage (internal to the Firestore service). No GCS bucket is required or created.
+1. **Scheduled backup restore creates a new Firestore database.** It does not overwrite the active production database.
+2. Restoring an entire database is a major operational action: application configuration, integration testing, and data reconciliation are required before any switch to a restored database.
+3. For a single missing transaction, first look for an **archived** canonical transaction. The application now archives transactions by default instead of hard-deleting them.
+4. When a missing transaction is not archived, use the relevant backup/PITR recovery source to inspect and reconstruct only verified data through the canonical application workflow. Do not write partial guesses directly to Firestore.
 
-Backups appear in:
+## Where to inspect recovery status
 
-- **Firebase Console** → Firestore Database → **Backups** tab
-- **Command line:** `gcloud firestore backups list`
+**Google Cloud Console:**
 
-## Monitoring
+1. Open Google Cloud Console for project `smart-broker-usa`.
+2. Open **Firestore** → **Disaster Recovery**.
+3. Confirm the PITR setting, daily/weekly retention, and that recent backup snapshot times advance.
 
-| Setting | Value |
-|---|---|
-| Alert email | jim@keatyrealestate.com |
-| Notification channel | `projects/smart-broker-usa/notificationChannels/1879317168672551501` |
-| Alert policy | **Firestore Backup Failure Alert** |
-| Alert policy resource | `projects/smart-broker-usa/alertPolicies/8350581705698710369` |
-| Alert trigger | No backup storage metric detected in 23.5 hours |
+## Command-line reference
 
-> **Note on alert window:** Google Cloud Monitoring's `conditionAbsent` (metric absence) alerts have a maximum detection window of 23h30m. The alert is configured at this maximum, which means it will fire if a backup is missed on any given day. Because the backup runs daily, a missed backup will be detected and reported within approximately 24 hours.
-
-## How to View Backups
-
-**Firebase Console:**
-Firebase Console → Firestore Database → Backups tab
-
-**Command line:**
-```bash
-gcloud firestore backups list
-```
-
-## How to Manually Trigger a Backup (if needed)
+These commands require an authenticated Google Cloud account with the applicable Firestore permissions.
 
 ```bash
-gcloud firestore backups create --database="(default)"
+# List backup schedules for the production default database
+gcloud firestore backups schedules list --database="(default)" --project=smart-broker-usa
+
+# List retained backup artifacts
+gcloud firestore backups list --project=smart-broker-usa
+
+# View the database's scheduled backup / disaster recovery details in the Console
+# Google Cloud Console → Firestore → Disaster Recovery
 ```
 
-## How to Restore From a Backup
+## Monitoring and operating procedure
 
-> **WARNING:** Restoring creates a **NEW** Firestore database. It does not overwrite the existing database. To use a restored backup, you must point the application at the new database name.
+The project has historical documentation for a backup-failure alert, but the October 14 review verified backup creation in the Firestore Console rather than revalidating the notification channel or alert policy IDs. Treat the Disaster Recovery console as the current source for backup health until monitoring is independently checked.
 
-**Steps:**
+Recommended operational check:
 
-1. List available backups:
-   ```bash
-   gcloud firestore backups list
-   ```
+- Monthly: verify the latest daily backup is less than 36 hours old and review PITR/retention values.
+- Quarterly: perform a written restore-readiness review without restoring production data.
+- Before a destructive cleanup: use the application’s archive path, supply a clear reason, and verify the transaction’s archive audit event.
 
-2. Restore (replace `BACKUP_ID` and choose a new database name):
-   ```bash
-   gcloud firestore databases restore \
-     --source-backup=BACKUP_ID \
-     --destination-database=DATABASE_NAME
-   ```
+## Cost and change policy
 
-3. Verify the restored database, then update the app's Firebase config to point at it if needed.
-
-## Estimated Monthly Cost
-
-Under $1/month for storage of 30 daily backups of a ~13 MB database. Google charges for backup storage at standard Firestore rates.
-
-## Manual Off-Google Copy (Recommended)
-
-Once a week, download the most recent backup to a non-Google location (laptop, external drive) for true off-cloud safety. This protects against accidental project deletion or Google account issues.
-
-## Schedule Management Commands
-
-```bash
-# List all backup schedules
-gcloud firestore backups schedules list --database="(default)"
-
-# Delete a schedule (stops future backups; existing backups remain until their retention expires)
-gcloud firestore backups schedules delete 32017554-2cb3-4be9-843b-7c243caeb2f7 \
-  --database="(default)"
-
-# Update retention period
-gcloud firestore backups schedules update 32017554-2cb3-4be9-843b-7c243caeb2f7 \
-  --database="(default)" \
-  --retention=NEW_DURATION
-
-# List existing backups
-gcloud firestore backups list
-
-# View alert policy
-gcloud alpha monitoring policies describe 8350581705698710369 --project=smart-broker-usa
-```
+Do not reduce retention, disable PITR, or create an additional backup schedule without an explicit business decision. Those changes can reduce recoverability or change Google Cloud storage costs.
