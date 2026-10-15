@@ -2,7 +2,7 @@
 
 ## Live verification status
 
-**Verified in the Google Cloud Console on October 14, 2026.** No backup, retention, or point-in-time recovery setting was changed during this verification.
+**Verified in the Google Cloud Console on October 14, 2026 and rechecked on October 15, 2026.** No backup, retention, or point-in-time recovery setting was changed during either verification.
 
 The live Firestore database has active scheduled backups and point-in-time recovery. The prior documentation understated the protection in place: it listed only daily backups and an unverified approximate run time.
 
@@ -21,7 +21,7 @@ The live Firestore database has active scheduled backups and point-in-time recov
 
 ## Current recovery evidence
 
-The console showed recent backups on consecutive days, including a backup created on **October 14, 2026 at 10:28:02 UTC**, expiring on **November 13, 2026 at 10:28:02 UTC**. The PITR panel reported an earliest available version time of **October 7, 2026 at 10:18:00 UTC**.
+The October 15 console check showed consecutive retained snapshots, including a new daily backup created on **October 15, 2026 at 5:35:02 AM GMT-5** (expiring **November 14, 2026 at 4:35:02 AM GMT-6**). The immediately preceding snapshots were October 14 at 5:28:02 AM and October 13 at 5:18:58 AM GMT-5. The PITR panel reported an earliest available version time of **October 8, 2026 at 5:30:00 PM UTC-5**.
 
 This confirms the recovery service is currently creating and retaining backups. It does **not** retroactively recreate a transaction that was deleted before the relevant recovery window or backup availability.
 
