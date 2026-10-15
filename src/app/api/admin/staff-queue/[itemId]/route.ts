@@ -6,7 +6,7 @@ import { isStaff, getStaffRole } from '@/lib/auth/staffAccess';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import { getAgentUid, getTcUids } from '@/lib/notifications/getRecipientUids';
 import { getDesignatedAccountingUids } from '@/lib/notifications/getRecipientUids';
-import { handoffClosedTransactionToAccounting } from '@/lib/transactions/accountingCloseout';
+import { handoffClosedTransactionToAccounting, hasOpenAccountingCloseout } from '@/lib/transactions/accountingCloseout';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { rebuildAgentRollup } from '@/lib/rollups/rebuildAgentRollup';
 import { resolveGCI } from '@/lib/commissions';
@@ -306,12 +306,14 @@ export async function PATCH(
 
     // ── Apply transaction field updates ─────────────────────────────────────
     let persistedTransaction: Record<string, any> | null = null;
+    let closedCanonicalSaveNeedsAccountingHandoff = false;
     if (txUpdates && item.transactionId) {
       const txRef = adminDb.collection('transactions').doc(item.transactionId);
 
       // Fetch current transaction state for merging
       const currentTxDoc = await txRef.get();
       const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
+      const transactionWasClosedBeforeSave = String(currentTx.status || '').trim().toLowerCase() === 'closed';
       if (!currentTxDoc.exists) return jsonError(404, 'Linked transaction not found');
       if (hasTransactionVersionConflict(currentTx.updatedAt, body.expectedTransactionUpdatedAt)) {
         return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
@@ -462,10 +464,15 @@ export async function PATCH(
         // and Accounting views will all read the same values.
         const persistedTransactionSnap = await txRef.get();
         if (!persistedTransactionSnap.exists) return jsonError(500, 'Transaction save could not be verified');
-        persistedTransaction = {
+        const verifiedTransaction = {
           id: persistedTransactionSnap.id,
           ...serializeFirestore(persistedTransactionSnap.data() || {}),
         };
+        persistedTransaction = verifiedTransaction;
+        const savedCloseoutStatus = String(verifiedTransaction.accountingCloseout?.status || '').trim();
+        closedCanonicalSaveNeedsAccountingHandoff =
+          String(verifiedTransaction.status || '').trim().toLowerCase() === 'closed' &&
+          (!transactionWasClosedBeforeSave || !savedCloseoutStatus);
 
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
         try {
@@ -664,13 +671,14 @@ export async function PATCH(
     // transaction editor. For a transaction already marked Closed, both that
     // approval and an explicit queue completion must create the same idempotent
     // departmental Accounting handoff on the canonical transaction.
-    const shouldHandoffClosedTransaction = (action === 'approve' || action === 'complete') && item.transactionId;
+    const shouldHandoffClosedTransaction =
+      (action === 'approve' || action === 'complete' || closedCanonicalSaveNeedsAccountingHandoff) && item.transactionId;
     if (shouldHandoffClosedTransaction) {
       const txDocForAccounting = await adminDb.collection('transactions').doc(item.transactionId).get();
       if (txDocForAccounting.exists && String(txDocForAccounting.data()?.status || '').toLowerCase() === 'closed') {
         try {
           const currentCloseout = (txDocForAccounting.data()?.accountingCloseout || {}) as Record<string, any>;
-          const alreadyInAccounting = currentCloseout.status && !['completed', 'archived'].includes(String(currentCloseout.status));
+          const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
           await handoffClosedTransactionToAccounting(adminDb, item.transactionId, {
             uid: decoded.uid,
             name: reviewerName,

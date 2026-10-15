@@ -10,7 +10,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { findTcIntakesForTransaction, reopenTcIntakeForTransaction } from '@/lib/transactions/tcQueueLifecycle';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getTcUids, getAllStaffUids, getAgentUid } from '@/lib/notifications/getRecipientUids';
+import { getTcUids, getAllStaffUids, getAgentUid, getDesignatedAccountingUids } from '@/lib/notifications/getRecipientUids';
 import { resolveTransactionSide } from '@/lib/transactions/resolveTransactionSide';
 import { sendAphwEducationInvitations } from '@/lib/home-warranty/sendAphwEducationInvite';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
@@ -26,6 +26,7 @@ import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { archiveCanonicalTransaction, isArchivedTransaction, restoreCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
+import { handoffClosedTransactionToAccounting, hasOpenAccountingCloseout } from '@/lib/transactions/accountingCloseout';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -759,6 +760,45 @@ export async function PATCH(req: NextRequest) {
     // below may add operational metadata, so the final response is re-read at
     // the end of this handler rather than acknowledging a stale local payload.
     const updatedSnap = await adminDb.collection('transactions').doc(id).get();
+
+    // The shared Staff/TC/Admin/Accounting editor saves through this route. A
+    // successful change to Closed must create the Accounting handoff now, rather
+    // than relying on a later, separate Staff Queue approval click.
+    try {
+      const transactionAfterSave = updatedSnap.data() as Record<string, any>;
+      const savedStatus = String(transactionAfterSave?.status || '').trim().toLowerCase();
+      const priorStatus = String(existingData?.status || '').trim().toLowerCase();
+      const savedCloseout = (transactionAfterSave?.accountingCloseout || {}) as Record<string, any>;
+      const shouldCreateAccountingHandoff = savedStatus === 'closed' && (
+        priorStatus !== 'closed' || !String(savedCloseout.status || '').trim()
+      );
+      if (shouldCreateAccountingHandoff) {
+        const alreadyInAccounting = hasOpenAccountingCloseout(savedCloseout);
+        await handoffClosedTransactionToAccounting(adminDb, id, {
+          uid: decoded.uid,
+          name: decoded.name || decoded.email || decoded.uid,
+          email: decoded.email || decoded.uid,
+        });
+        if (!alreadyInAccounting) {
+          const accountingUids = await getDesignatedAccountingUids(adminDb);
+          if (accountingUids.length > 0) {
+            const address = String(transactionAfterSave?.propertyAddress || transactionAfterSave?.address || 'a closed transaction');
+            await sendNotification(adminDb, {
+              type: 'accounting_closeout_new',
+              recipientUids: accountingUids,
+              title: 'New Accounting Closeout',
+              body: `${address} is ready for Accounting review.`,
+              url: `/dashboard/admin/accounting?transactionId=${id}`,
+              data: { transactionId: id },
+            });
+          }
+        }
+      }
+    } catch (accountingError: any) {
+      // The canonical save remains durable even if an operational handoff needs
+      // follow-up; the next Staff/TC closeout action can safely retry it.
+      console.error('[api/admin/transactions PATCH] Accounting handoff failed:', accountingError?.message || accountingError);
+    }
 
     // ── TC Queue refresh ───────────────────────────────────────────────────
     // Operational edits use the same one-row-per-transaction workflow rule as

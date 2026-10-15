@@ -14,6 +14,17 @@ export type AccountingActor = {
 };
 
 /**
+ * An open Accounting closeout must never be replaced by a second handoff.
+ * Completed and archived cases may be deliberately re-opened by a subsequent
+ * authorized Staff/TC closeout action.
+ */
+export function hasOpenAccountingCloseout(closeout: unknown): boolean {
+  if (!closeout || typeof closeout !== 'object') return false;
+  const status = String((closeout as Record<string, any>).status || '').trim().toLowerCase();
+  return Boolean(status) && !['completed', 'archived'].includes(status);
+}
+
+/**
  * The field list is an accounting review snapshot, not a second transaction
  * record. Values are rebuilt from the canonical transaction on every queue
  * load so corrections made by Admin, Staff, or TC are reflected immediately.
@@ -357,7 +368,7 @@ export async function handoffClosedTransactionToAccounting(
   if (!txDoc.exists) throw new Error('Linked transaction was not found');
   const transaction = txDoc.data() as Record<string, any>;
   const current = (transaction.accountingCloseout || {}) as Record<string, any>;
-  if (current.status && !['completed', 'archived'].includes(String(current.status))) return current;
+  if (hasOpenAccountingCloseout(current)) return current;
 
   const now = new Date().toISOString();
   const snapshot = buildAccountingSnapshot(transaction, transactionId);

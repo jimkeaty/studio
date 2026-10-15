@@ -7,6 +7,8 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8');
 const closeout = read('src/lib/transactions/accountingCloseout.ts');
 const route = read('src/app/api/admin/accounting-closeout/route.ts');
 const staffQueue = read('src/app/api/admin/staff-queue/[itemId]/route.ts');
+const tcQueue = read('src/app/api/admin/tc/[id]/route.ts');
+const adminTransactions = read('src/app/api/admin/transactions/route.ts');
 const access = read('src/lib/auth/staffAccess.ts');
 const panel = read('src/components/dashboard/broker/AccountingCloseoutQueue.tsx');
 
@@ -48,6 +50,18 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(staffQueue, /getDesignatedAccountingUids/);
   assert.match(staffQueue, /accounting_closeout_new/);
   assert.match(staffQueue, /const alreadyInAccounting/);
+});
+
+test('an authorized Closed save routes directly to Accounting without requiring a second queue click', () => {
+  assert.match(adminTransactions, /const shouldCreateAccountingHandoff/);
+  assert.match(adminTransactions, /handoffClosedTransactionToAccounting/);
+  assert.match(adminTransactions, /getDesignatedAccountingUids/);
+  assert.match(staffQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
+  assert.match(staffQueue, /action === 'approve' \|\| action === 'complete' \|\| closedCanonicalSaveNeedsAccountingHandoff/);
+  assert.match(tcQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
+  assert.match(tcQueue, /handoffClosedTransactionToAccounting/);
+  assert.match(tcQueue, /\[TC approve\] Accounting handoff failed/);
+  assert.match(tcQueue, /TC may approve an intake that already includes a close date/);
 });
 
 test('the accounting workflow is list-first, opens the full editor, and has no manual case assignment', () => {
