@@ -8,7 +8,7 @@ import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamT
 import { resolveGCI } from '@/lib/commissions';
 import { hasTransactionVersionConflict } from '@/lib/transactions/transactionVersion';
 import { sendNotification } from '@/lib/notifications/sendNotification';
-import { getAgentUid, getAllStaffUids, getDesignatedAccountingUids } from '@/lib/notifications/getRecipientUids';
+import { getAgentUid, getAllStaffUids } from '@/lib/notifications/getRecipientUids';
 import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllocations';
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral';
@@ -23,7 +23,6 @@ import {
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
-import { handoffClosedTransactionToAccounting, hasOpenAccountingCloseout } from '@/lib/transactions/accountingCloseout';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -515,7 +514,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Fields that are intake-only (workflow status, checklist, etc.) are excluded.
       const linkedTxId = toOptStr(intake.approvedTransactionId);
       let persistedTransaction: Record<string, any> | null = null;
-      let closedCanonicalSaveNeedsAccountingHandoff = false;
       if (linkedTxId) {
         // Sync ALL editable fields to the transactions document (single source of truth).
         // Since transactions is now the canonical record, every TC edit must be mirrored there.
@@ -604,7 +602,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         const hasCommissionChange = Object.keys(txSyncUpdate).some(k => COMMISSION_TRIGGER.has(k));
         const currentTxForUpdateDoc = await adminDb.collection('transactions').doc(linkedTxId).get();
         const currentTxForUpdate = currentTxForUpdateDoc.exists ? (currentTxForUpdateDoc.data() as Record<string, any>) : {};
-        const transactionWasClosedBeforeSave = String(currentTxForUpdate.status || '').trim().toLowerCase() === 'closed';
         const isPassThrough = isPassThroughTransaction({ ...currentTxForUpdate, ...txSyncUpdate });
         if (hasCommissionChange) {
           try {
@@ -722,10 +719,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             ...serializeFirestore(persistedTransactionSnap.data() || {}),
           };
           persistedTransaction = verifiedTransaction;
-          const savedCloseoutStatus = String(verifiedTransaction.accountingCloseout?.status || '').trim();
-          closedCanonicalSaveNeedsAccountingHandoff =
-            String(verifiedTransaction.status || '').trim().toLowerCase() === 'closed' &&
-            (!transactionWasClosedBeforeSave || !savedCloseoutStatus);
         } catch (syncErr: any) {
           if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
@@ -759,37 +752,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // been written and read back successfully. This prevents the queue from
       // displaying a value that the ledger, accounting, or agent view lacks.
       await docRef.update(updates);
-
-      // The direct TC update route remains available to operational users and
-      // integrations. It follows the same immediate Closed → Accounting rule
-      // as the shared editor, without duplicating an open Accounting record.
-      if (closedCanonicalSaveNeedsAccountingHandoff && linkedTxId && persistedTransaction) {
-        try {
-          const currentCloseout = (persistedTransaction.accountingCloseout || {}) as Record<string, any>;
-          const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
-          await handoffClosedTransactionToAccounting(adminDb, linkedTxId, {
-            uid: decoded.uid,
-            name: decoded.name || decoded.email || decoded.uid,
-            email: decoded.email || decoded.uid,
-          });
-          if (!alreadyInAccounting) {
-            const accountingUids = await getDesignatedAccountingUids(adminDb);
-            if (accountingUids.length > 0) {
-              const address = String(persistedTransaction.propertyAddress || persistedTransaction.address || intake.address || intake.propertyAddress || 'a closed transaction');
-              await sendNotification(adminDb, {
-                type: 'accounting_closeout_new',
-                recipientUids: accountingUids,
-                title: 'New Accounting Closeout',
-                body: `${address} is ready for Accounting review.`,
-                url: `/dashboard/admin/accounting?transactionId=${linkedTxId}`,
-                data: { transactionId: linkedTxId },
-              });
-            }
-          }
-        } catch (accountingError: any) {
-          console.error('[TC update] Accounting handoff failed:', accountingError?.message || accountingError);
-        }
-      }
 
       // Notify agent that TC has edited their transaction
       void (async () => {
@@ -1389,42 +1351,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         reviewedBy: decoded.email,
         updatedAt: now,
       });
-
-      // A TC may approve an intake that already includes a close date. In that
-      // case approval creates (or reuses) a canonical Closed transaction, so
-      // route it straight to Accounting instead of waiting for an unrelated
-      // future Staff Queue action.
-      const approvedTransactionSnap = await adminDb.collection('transactions').doc(transactionId).get();
-      if (approvedTransactionSnap.exists) {
-        const approvedTransaction = approvedTransactionSnap.data() as Record<string, any>;
-        if (String(approvedTransaction.status || '').trim().toLowerCase() === 'closed') {
-          try {
-            const currentCloseout = (approvedTransaction.accountingCloseout || {}) as Record<string, any>;
-            const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
-            await handoffClosedTransactionToAccounting(adminDb, transactionId, {
-              uid: decoded.uid,
-              name: decoded.name || decoded.email || decoded.uid,
-              email: decoded.email || decoded.uid,
-            });
-            if (!alreadyInAccounting) {
-              const accountingUids = await getDesignatedAccountingUids(adminDb);
-              if (accountingUids.length > 0) {
-                const address = String(approvedTransaction.propertyAddress || approvedTransaction.address || intake.address || intake.propertyAddress || 'a closed transaction');
-                await sendNotification(adminDb, {
-                  type: 'accounting_closeout_new',
-                  recipientUids: accountingUids,
-                  title: 'New Accounting Closeout',
-                  body: `${address} is ready for Accounting review.`,
-                  url: `/dashboard/admin/accounting?transactionId=${transactionId}`,
-                  data: { transactionId },
-                });
-              }
-            }
-          } catch (accountingError: any) {
-            console.error('[TC approve] Accounting handoff failed:', accountingError?.message || accountingError);
-          }
-        }
-      }
 
       // Rebuild rollups for both participants from the same preserved transaction.
       try {

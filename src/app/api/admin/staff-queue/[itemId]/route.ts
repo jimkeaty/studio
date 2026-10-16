@@ -306,14 +306,12 @@ export async function PATCH(
 
     // ── Apply transaction field updates ─────────────────────────────────────
     let persistedTransaction: Record<string, any> | null = null;
-    let closedCanonicalSaveNeedsAccountingHandoff = false;
     if (txUpdates && item.transactionId) {
       const txRef = adminDb.collection('transactions').doc(item.transactionId);
 
       // Fetch current transaction state for merging
       const currentTxDoc = await txRef.get();
       const currentTx = currentTxDoc.exists ? (currentTxDoc.data() as any) : {};
-      const transactionWasClosedBeforeSave = String(currentTx.status || '').trim().toLowerCase() === 'closed';
       if (!currentTxDoc.exists) return jsonError(404, 'Linked transaction not found');
       if (hasTransactionVersionConflict(currentTx.updatedAt, body.expectedTransactionUpdatedAt)) {
         return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
@@ -469,10 +467,6 @@ export async function PATCH(
           ...serializeFirestore(persistedTransactionSnap.data() || {}),
         };
         persistedTransaction = verifiedTransaction;
-        const savedCloseoutStatus = String(verifiedTransaction.accountingCloseout?.status || '').trim();
-        closedCanonicalSaveNeedsAccountingHandoff =
-          String(verifiedTransaction.status || '').trim().toLowerCase() === 'closed' &&
-          (!transactionWasClosedBeforeSave || !savedCloseoutStatus);
 
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
         try {
@@ -667,12 +661,10 @@ export async function PATCH(
       }
     }
 
-    // A Staff Queue approval is the user-facing closeout action in the unified
-    // transaction editor. For a transaction already marked Closed, both that
-    // approval and an explicit queue completion must create the same idempotent
-    // departmental Accounting handoff on the canonical transaction.
-    const shouldHandoffClosedTransaction =
-      (action === 'approve' || action === 'complete' || closedCanonicalSaveNeedsAccountingHandoff) && item.transactionId;
+    // A Closed save enters the Staff Queue; it must not bypass that review.
+    // Only a deliberate Staff approval advances the same canonical transaction
+    // to Accounting, where Accounting performs its separate review/completion.
+    const shouldHandoffClosedTransaction = action === 'approve' && item.transactionId;
     if (shouldHandoffClosedTransaction) {
       const txDocForAccounting = await adminDb.collection('transactions').doc(item.transactionId).get();
       if (txDocForAccounting.exists && String(txDocForAccounting.data()?.status || '').toLowerCase() === 'closed') {

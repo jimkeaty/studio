@@ -18,7 +18,7 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(closeout, /processingHistory/);
   assert.match(closeout, /TC\/Staff closeout completed and the closed transaction was sent to Accounting/);
   assert.match(staffQueue, /handoffClosedTransactionToAccounting/);
-  assert.match(staffQueue, /action === 'approve' \|\| action === 'complete'/);
+  assert.match(staffQueue, /action === 'approve' && item\.transactionId/);
   assert.match(staffQueue, /const shouldHandoffClosedTransaction/);
   assert.match(staffQueue, /String\(txDocForAccounting\.data\(\)\?\.status \|\| ''\)\.toLowerCase\(\) === 'closed'/);
 });
@@ -52,16 +52,13 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(staffQueue, /const alreadyInAccounting/);
 });
 
-test('an authorized Closed save routes directly to Accounting without requiring a second queue click', () => {
-  assert.match(adminTransactions, /const shouldCreateAccountingHandoff/);
-  assert.match(adminTransactions, /handoffClosedTransactionToAccounting/);
-  assert.match(adminTransactions, /getDesignatedAccountingUids/);
-  assert.match(staffQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
-  assert.match(staffQueue, /action === 'approve' \|\| action === 'complete' \|\| closedCanonicalSaveNeedsAccountingHandoff/);
-  assert.match(tcQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
-  assert.match(tcQueue, /handoffClosedTransactionToAccounting/);
-  assert.match(tcQueue, /\[TC approve\] Accounting handoff failed/);
-  assert.match(tcQueue, /TC may approve an intake that already includes a close date/);
+test('a Closed save remains in Staff Queue until Staff approves it for Accounting', () => {
+  assert.doesNotMatch(adminTransactions, /handoffClosedTransactionToAccounting/);
+  assert.doesNotMatch(tcQueue, /handoffClosedTransactionToAccounting/);
+  assert.doesNotMatch(staffQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
+  assert.match(staffQueue, /Only a deliberate Staff approval advances the same canonical transaction/);
+  assert.match(staffQueue, /action === 'approve' && item\.transactionId/);
+  assert.match(route, /TC\/Staff closeout has not handed this transaction to Accounting yet/);
 });
 
 test('the accounting workflow is list-first, opens the full editor, and has no manual case assignment', () => {
