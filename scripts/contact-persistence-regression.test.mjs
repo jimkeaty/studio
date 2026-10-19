@@ -67,3 +67,10 @@ test('a blank same-owner contact duplicate is hidden when a complete record exis
   assert.match(contactsRoute, /candidate\.type === contact\.type/);
   assert.match(contactsRoute, /clean\(candidate\.email\) \|\| clean\(candidate\.phone\) \|\| clean\(candidate\.newAddress\)/);
 });
+
+test('Contact Book and autocomplete search the supported window before applying display limits', () => {
+  assert.match(contactsRoute, /const fetchLimit = q \? 1000 : limitN/);
+  assert.match(contactsRoute, /adminDb\.collection\('contacts'\)\.limit\(fetchLimit\)/);
+  assert.match(contactsRoute, /contacts = contacts\.slice\(0, limitN\)/);
+  assert.match(contactBook, /new URLSearchParams\(\{ limit: '1000' \}\)/);
+});

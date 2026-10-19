@@ -197,7 +197,9 @@ export default function ContactsPage() {
     setLoading(true);
     try {
       const token = await user.getIdToken();
-      const params = new URLSearchParams({ limit: '500' });
+      // The Contacts API supports 1,000 records. Use its full supported window
+      // so a valid newer contact does not disappear behind an older duplicate.
+      const params = new URLSearchParams({ limit: '1000' });
       if (filterType !== 'all') params.set('type', filterType);
       const res = await fetch(`/api/contacts?${params}`, {
         headers: { Authorization: `Bearer ${token}` },

@@ -56,12 +56,17 @@ export async function GET(req: NextRequest) {
     const limitN = Number.isFinite(requestedLimit)
       ? Math.min(Math.max(requestedLimit, 1), 1000)
       : 500;
+    // Autocomplete asks for only ten display results. Its text search must still
+    // inspect the supported Contact Book window before that result limit applies;
+    // otherwise a valid contact beyond the first ten Firestore documents can
+    // never be found or selected.
+    const fetchLimit = q ? 1000 : limitN;
 
     // Staff (admin, TC, office staff) see ALL contacts.
     // Agents only see contacts they personally created (createdBy == their uid).
     const callerIsStaff = await isStaff(uid);
 
-    let query: FirebaseFirestore.Query = adminDb.collection('contacts').limit(limitN);
+    let query: FirebaseFirestore.Query = adminDb.collection('contacts').limit(fetchLimit);
 
     if (type && VALID_TYPES.includes(type as ContactType)) {
       query = query.where('type', '==', type);
@@ -123,6 +128,7 @@ export async function GET(req: NextRequest) {
       if (ub !== ua) return ub - ua;
       return (a.name || a.companyName || '').localeCompare(b.name || b.companyName || '');
     });
+    contacts = contacts.slice(0, limitN);
 
     return NextResponse.json({ ok: true, contacts });
   } catch (err: any) {
