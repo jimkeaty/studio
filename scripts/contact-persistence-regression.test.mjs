@@ -49,3 +49,13 @@ test('transaction contacts auto-save and autocomplete for buyers, sellers, lende
   assert.match(transactionForm, /saveContact\('title'/);
   assert.match(transactionForm, /saveContact\('other_agent'/);
 });
+
+test('automatic transaction contact saves deduplicate a client and never erase saved details with blank aliases', () => {
+  assert.match(transactionForm, /const clientsByName = new Map/);
+  assert.match(transactionForm, /A listing can carry the same person in the legacy clientName field/);
+  assert.match(transactionForm, /email: String\(current\.email \|\| email\)/);
+  assert.match(transactionForm, /phone: String\(current\.phone \|\| phone\)/);
+  assert.match(contactsRoute, /Automatic transaction upserts are additive/);
+  assert.match(contactsRoute, /\['name', 'email', 'phone', 'newAddress', 'companyName'/);
+  assert.match(contactsRoute, /if \(!clean\(contact\[field\]\) && clean\(existingContact\[field\]\)\)/);
+});

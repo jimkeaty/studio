@@ -3203,7 +3203,7 @@ export default function AddTransactionPage() {
       ];
 
       const clientFields = [
-        { name: values.clientName, email: values.clientEmail, phone: values.clientPhone },
+        { name: values.clientName, email: values.clientEmail, phone: values.clientPhone, newAddress: values.clientNewAddress },
         { name: values.client2Name, email: values.client2Email, phone: values.client2Phone },
         { name: values.buyerName, email: values.buyerEmail, phone: values.buyerPhone },
         { name: values.buyer2Name, email: values.buyer2Email, phone: values.buyer2Phone },
@@ -3214,8 +3214,28 @@ export default function AddTransactionPage() {
         { name: values.seller3Name, email: values.seller3Email, phone: values.seller3Phone },
         { name: values.seller4Name, email: values.seller4Email, phone: values.seller4Phone },
       ];
+      // A listing can carry the same person in the legacy clientName field and
+      // the seller field. Do not issue two concurrent upserts for that person:
+      // the legacy copy commonly has no email/phone and could otherwise win the
+      // race after the complete seller record, blanking the Contact Book entry.
+      const clientsByName = new Map<string, Record<string, string>>();
       for (const contact of clientFields) {
-        if (contact.name || contact.email || contact.phone) contactSaves.push(saveContact('client', contact));
+        const name = String(contact.name || '').trim();
+        const email = String(contact.email || '').trim();
+        const phone = String(contact.phone || '').trim();
+        const newAddress = String(contact.newAddress || '').trim();
+        if (!name && !email && !phone) continue;
+        const contactKey = name.toLowerCase().replace(/[^a-z0-9]/g, '') || `contact:${email.toLowerCase()}|${phone.replace(/[^0-9]/g, '')}`;
+        const current = clientsByName.get(contactKey) || {};
+        clientsByName.set(contactKey, {
+          name: String(current.name || name),
+          email: String(current.email || email),
+          phone: String(current.phone || phone),
+          newAddress: String(current.newAddress || newAddress),
+        });
+      }
+      for (const contact of clientsByName.values()) {
+        contactSaves.push(saveContact('client', contact));
       }
 
       // Add every selected inspection vendor to this agent's Contact Book.

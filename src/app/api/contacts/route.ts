@@ -252,6 +252,19 @@ export async function POST(req: NextRequest) {
         if (matching) existingId = matching.id;
       }
       if (existingId) {
+        const existingContact = (await adminDb.collection('contacts').doc(existingId).get()).data() || {};
+        // Automatic transaction upserts are additive: an empty legacy client
+        // alias must never erase a saved email, phone, or other contact detail.
+        // Deliberate clearing remains available in the Contact Book edit screen.
+        for (const field of ['name', 'email', 'phone', 'newAddress', 'companyName', 'officerName', 'office', 'attorney', 'brokerage', 'specialties']) {
+          if (!clean(contact[field]) && clean(existingContact[field])) {
+            contact[field] = clean(existingContact[field]);
+          }
+        }
+        contact.normalizedEmail = normalized(contact.email);
+        contact.normalizedPhone = normalized(contact.phone);
+        contact.normalizedName = normalized(contact.name);
+        contact.normalizedCompanyName = normalized(contact.companyName);
         await adminDb.collection('contacts').doc(existingId).update({
           ...contact,
           usageCount: admin.firestore.FieldValue.increment(1),

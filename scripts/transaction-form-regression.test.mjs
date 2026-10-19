@@ -488,7 +488,8 @@ test('transaction-entered contacts upsert after both creates and edits for the o
   assert.match(formSource, /body: JSON\.stringify\(\{[\s\S]*type,[\s\S]*upsert: true,[\s\S]*viewAs: effectiveUid/);
   assert.match(formSource, /await syncContactsToBook\(token\);[\s\S]*lastSaveSucceededRef\.current = true/);
   assert.match(formSource, /if \(!res\.ok \|\| !data\.ok\) throw new Error\(data\.error \|\| 'Submission failed'\);[\s\S]*await syncContactsToBook\(token\);/);
-  assert.match(formSource, /if \(contact\.name \|\| contact\.email \|\| contact\.phone\)/);
+  assert.match(formSource, /const clientsByName = new Map/);
+  assert.match(formSource, /for \(const contact of clientsByName\.values\(\)\)/);
   assert.match(formSource, /Add every selected inspection vendor to this agent's Contact Book/);
   assert.match(contactsRouteSource, /let effectiveCreatedBy = \(callerIsStaff && postViewAs\) \? String\(postViewAs\) : uid/);
   assert.match(contactsRouteSource, /ownerAgentId && !postViewAs/);
