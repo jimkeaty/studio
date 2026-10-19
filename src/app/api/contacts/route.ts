@@ -80,6 +80,31 @@ export async function GET(req: NextRequest) {
       // Smart Broker USA tenant. New documents always carry an explicit scope.
       .filter((contact: any) => (contact.tenantId || DEFAULT_TENANT_ID) === scope);
 
+    // Earlier transaction saves could leave a name-only client record beside a
+    // later, complete record for the same person. Keep both documents intact for
+    // audit/recovery, but do not offer a clearly inferior blank duplicate in the
+    // Contact Book or transaction autocomplete. This is intentionally narrow:
+    // it applies only to same-owner individual contacts with the same normalized
+    // name when the older record has no email, phone, or forwarding address.
+    contacts = contacts.filter((contact: any, _index: number, allContacts: any[]) => {
+      const contactName = contact.normalizedName || normalized(contact.name);
+      const isBlankIndividual = contact.recordKind !== 'company'
+        && Boolean(contactName)
+        && !clean(contact.email)
+        && !clean(contact.phone)
+        && !clean(contact.newAddress);
+      if (!isBlankIndividual) return true;
+      return !allContacts.some((candidate: any) => (
+        candidate.id !== contact.id
+        && candidate.recordKind !== 'company'
+        && candidate.type === contact.type
+        && candidate.createdBy === contact.createdBy
+        && (candidate.tenantId || DEFAULT_TENANT_ID) === (contact.tenantId || DEFAULT_TENANT_ID)
+        && (candidate.normalizedName || normalized(candidate.name)) === contactName
+        && (clean(candidate.email) || clean(candidate.phone) || clean(candidate.newAddress))
+      ));
+    });
+
     // Client-side text filter (Firestore doesn't support full-text search)
     if (q) {
       contacts = contacts.filter((c: any) => {

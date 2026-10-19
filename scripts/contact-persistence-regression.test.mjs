@@ -59,3 +59,11 @@ test('automatic transaction contact saves deduplicate a client and never erase s
   assert.match(contactsRoute, /\['name', 'email', 'phone', 'newAddress', 'companyName'/);
   assert.match(contactsRoute, /if \(!clean\(contact\[field\]\) && clean\(existingContact\[field\]\)\)/);
 });
+
+test('a blank same-owner contact duplicate is hidden when a complete record exists without deleting either record', () => {
+  assert.match(contactsRoute, /Keep both documents intact for[\s\S]*audit\/recovery/);
+  assert.match(contactsRoute, /const isBlankIndividual = contact\.recordKind !== 'company'/);
+  assert.match(contactsRoute, /candidate\.createdBy === contact\.createdBy/);
+  assert.match(contactsRoute, /candidate\.type === contact\.type/);
+  assert.match(contactsRoute, /clean\(candidate\.email\) \|\| clean\(candidate\.phone\) \|\| clean\(candidate\.newAddress\)/);
+});
