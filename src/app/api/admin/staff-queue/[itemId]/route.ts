@@ -525,6 +525,50 @@ export async function PATCH(
       await batch.commit();
     }
 
+    // A Staff approval is the sole gate from a closed canonical transaction into
+    // Accounting. Create and verify that canonical handoff before marking the
+    // Staff Queue item approved. Otherwise a transient handoff failure could
+    // present a false completed approval while silently stranding the file.
+    let accountingHandoff: { status: string; newlyCreated: boolean } | null = null;
+    const shouldVerifyAccountingHandoff = action === 'approve' && Boolean(item.transactionId);
+    if (shouldVerifyAccountingHandoff) {
+      const txRefForAccounting = adminDb.collection('transactions').doc(String(item.transactionId));
+      const txDocForAccounting = await txRefForAccounting.get();
+      const queueRequestedClosedStatus = String(item.newStatus || '').trim().toLowerCase() === 'closed';
+      const canonicalStatus = String(txDocForAccounting.data()?.status || '').trim().toLowerCase();
+
+      // A normal listing/status approval does not belong in Accounting. A Staff
+      // Queue item specifically submitted as Closed must, however, still point
+      // to a canonical Closed record; do not give a false approval if it does not.
+      if (queueRequestedClosedStatus && (!txDocForAccounting.exists || canonicalStatus !== 'closed')) {
+        return jsonError(409, 'This Staff Queue item is marked Closed, but its linked transaction is not currently Closed. Refresh the file, save the Closed status, then approve it for Accounting.');
+      }
+
+      if (txDocForAccounting.exists && canonicalStatus === 'closed') {
+        const currentCloseout = (txDocForAccounting.data()?.accountingCloseout || {}) as Record<string, any>;
+        const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
+        try {
+          await handoffClosedTransactionToAccounting(adminDb, String(item.transactionId), {
+            uid: decoded.uid,
+            name: reviewerName,
+            email: reviewerEmail,
+          });
+          const verifiedHandoffSnap = await txRefForAccounting.get();
+          const verifiedHandoff = (verifiedHandoffSnap.data()?.accountingCloseout || {}) as Record<string, any>;
+          if (!verifiedHandoffSnap.exists || !hasOpenAccountingCloseout(verifiedHandoff)) {
+            return jsonError(500, 'Accounting handoff could not be verified. The Staff Queue item was not approved; retry after refreshing.');
+          }
+          accountingHandoff = {
+            status: String(verifiedHandoff.status),
+            newlyCreated: !alreadyInAccounting,
+          };
+        } catch (accountingError: any) {
+          console.error('[staff-queue PATCH] Accounting handoff failed before approval:', accountingError?.message);
+          return jsonError(500, 'Accounting handoff failed. The Staff Queue item was not approved; retry after refreshing.');
+        }
+      }
+    }
+
     // ── Build queue item updates ─────────────────────────────────────────────
     const itemUpdates: Record<string, any> = { updatedAt: now };
 
@@ -546,7 +590,9 @@ export async function PATCH(
       itemUpdates.reviewedByName = reviewerName;
       itemUpdates.reviewedAt = now;
       logAction = 'Approved';
-      logDetail = `Approved by ${reviewerEmail}`;
+      logDetail = accountingHandoff
+        ? `Approved by ${reviewerEmail}; verified handoff to Accounting (${accountingHandoff.status}).`
+        : `Approved by ${reviewerEmail}`;
     } else if (action === 'complete') {
       itemUpdates.status = 'completed';
       itemUpdates.reviewedBy = decoded.uid;
@@ -661,39 +707,29 @@ export async function PATCH(
       }
     }
 
-    // A Closed save enters the Staff Queue; it must not bypass that review.
-    // Only a deliberate Staff approval advances the same canonical transaction
-    // to Accounting, where Accounting performs its separate review/completion.
-    const shouldHandoffClosedTransaction = action === 'approve' && item.transactionId;
-    if (shouldHandoffClosedTransaction) {
-      const txDocForAccounting = await adminDb.collection('transactions').doc(item.transactionId).get();
-      if (txDocForAccounting.exists && String(txDocForAccounting.data()?.status || '').toLowerCase() === 'closed') {
+    // Send the designated Accounting notification only after the Staff approval
+    // and the canonical accounting handoff have both persisted. Notification
+    // failure remains non-blocking; it does not change the durable queue state.
+    if (accountingHandoff?.newlyCreated && item.transactionId) {
+      void (async () => {
         try {
-          const currentCloseout = (txDocForAccounting.data()?.accountingCloseout || {}) as Record<string, any>;
-          const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
-          await handoffClosedTransactionToAccounting(adminDb, item.transactionId, {
-            uid: decoded.uid,
-            name: reviewerName,
-            email: reviewerEmail,
-          });
-          if (!alreadyInAccounting) {
-            const accountingUids = await getDesignatedAccountingUids(adminDb);
-            if (accountingUids.length > 0) {
-              const txAddress = String(txDocForAccounting.data()?.propertyAddress || txDocForAccounting.data()?.address || 'a closed transaction');
-              await sendNotification(adminDb, {
-                type: 'accounting_closeout_new',
-                recipientUids: accountingUids,
-                title: 'New Accounting Closeout',
-                body: `${txAddress} is ready for Accounting review.`,
-                url: `/dashboard/admin/accounting?transactionId=${item.transactionId}`,
-                data: { transactionId: item.transactionId },
-              });
-            }
+          const accountingUids = await getDesignatedAccountingUids(adminDb);
+          if (accountingUids.length > 0) {
+            const txDocForNotification = await adminDb.collection('transactions').doc(String(item.transactionId)).get();
+            const txAddress = String(txDocForNotification.data()?.propertyAddress || txDocForNotification.data()?.address || 'a closed transaction');
+            await sendNotification(adminDb, {
+              type: 'accounting_closeout_new',
+              recipientUids: accountingUids,
+              title: 'New Accounting Closeout',
+              body: `${txAddress} is ready for Accounting review.`,
+              url: `/dashboard/admin/accounting?transactionId=${item.transactionId}`,
+              data: { transactionId: item.transactionId },
+            });
           }
-        } catch (accountingError: any) {
-          console.error('[staff-queue PATCH] Accounting handoff failed:', accountingError?.message);
+        } catch (notificationError: any) {
+          console.error('[staff-queue PATCH] Accounting notification error:', notificationError?.message);
         }
-      }
+      })();
     }
 
     // ── Notify TC of staff queue actions ────────────────────────────────────────────
@@ -746,6 +782,7 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       updated: { id: itemId, ...itemUpdates },
+      ...(accountingHandoff ? { accountingHandoff: { ...accountingHandoff, verified: true } } : {}),
       ...(persistedTransaction ? { transaction: persistedTransaction, persistenceVerified: true } : {}),
     });
   } catch (err: any) {

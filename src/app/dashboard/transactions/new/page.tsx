@@ -4081,7 +4081,7 @@ export default function AddTransactionPage() {
             >
               {submitting ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Saving...</> : '💾 Save Changes'}
             </Button>
-            {/* Approve — saves first then calls the approve API */}
+            {/* Approve — saves first, then sends a closed Staff-approved file to Accounting. */}
             {intakeStatus !== 'approved' && (
               <Button
                 type="button"
@@ -4108,7 +4108,12 @@ export default function AddTransactionPage() {
                     const data = await res.json();
                     if (!res.ok || !data.ok) throw new Error(data.error || 'Approval failed');
                     setIntakeStatus('approved');
-                    toast({ title: '✅ Transaction Approved', description: 'Saved and approved successfully.' });
+                    toast({
+                      title: '✅ Transaction Approved',
+                      description: queueRole === 'staff' && data.accountingHandoff?.verified
+                        ? 'Saved, Staff-approved, and sent to Accounting for its separate review.'
+                        : 'Saved and approved successfully.',
+                    });
                   } catch (err: any) {
                     toast({ title: 'Approval Failed', description: err.message, variant: 'destructive' });
                   } finally {
@@ -4117,7 +4122,7 @@ export default function AddTransactionPage() {
                 }}
                 className="text-xs bg-green-600 hover:bg-green-700 text-white"
               >
-                {intakeApproving ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Approving...</> : '✓ Approve'}
+                {intakeApproving ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Approving...</> : queueRole === 'staff' && watchedStatus === 'closed' ? '✓ Approve & Send to Accounting' : '✓ Approve'}
               </Button>
             )}
             {intakeStatus === 'approved' && (

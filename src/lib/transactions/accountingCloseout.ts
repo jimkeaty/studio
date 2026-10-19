@@ -386,7 +386,11 @@ export async function handoffClosedTransactionToAccounting(
     assignedToName: null,
     updatedAt: now,
   };
-  await txRef.set({
+  // The Accounting state and its immutable audit event are a single workflow
+  // transition. Commit them together so a Staff approval can reliably verify
+  // that both the queue state and recovery trail exist before reporting success.
+  const batch = db.batch();
+  batch.set(txRef, {
     departmentalProcessing: {
       ...(transaction.departmentalProcessing || {}),
       tcStaffCloseout: { status: 'completed', completedAt: accountingCloseout.tcCompletedAt, completedBy: accountingCloseout.tcCompletedBy },
@@ -395,10 +399,12 @@ export async function handoffClosedTransactionToAccounting(
     accountingCloseout,
     updatedAt: now,
   }, { merge: true });
-  await writeProcessingHistory(db, transactionId, {
+  batch.set(txRef.collection('processingHistory').doc(), {
     action: 'Accounting handoff created',
     detail: 'TC/Staff closeout completed and the closed transaction was sent to Accounting.',
     actor,
+    timestamp: now,
   });
+  await batch.commit();
   return accountingCloseout;
 }

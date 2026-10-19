@@ -16,11 +16,14 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(closeout, /departmentalProcessing/);
   assert.match(closeout, /accountingCloseout/);
   assert.match(closeout, /processingHistory/);
+  assert.match(closeout, /const batch = db\.batch\(\)/);
+  assert.match(closeout, /await batch\.commit\(\)/);
   assert.match(closeout, /TC\/Staff closeout completed and the closed transaction was sent to Accounting/);
   assert.match(staffQueue, /handoffClosedTransactionToAccounting/);
-  assert.match(staffQueue, /action === 'approve' && item\.transactionId/);
-  assert.match(staffQueue, /const shouldHandoffClosedTransaction/);
-  assert.match(staffQueue, /String\(txDocForAccounting\.data\(\)\?\.status \|\| ''\)\.toLowerCase\(\) === 'closed'/);
+  assert.match(staffQueue, /action === 'approve' && Boolean\(item\.transactionId\)/);
+  assert.match(staffQueue, /const shouldVerifyAccountingHandoff/);
+  assert.match(staffQueue, /const queueRequestedClosedStatus/);
+  assert.match(staffQueue, /Accounting handoff could not be verified/);
 });
 
 test('accounting snapshot supplies the full requested transaction, commission, referral, fee, and payout data to the list-first queue', () => {
@@ -56,8 +59,10 @@ test('a Closed save remains in Staff Queue until Staff approves it for Accountin
   assert.doesNotMatch(adminTransactions, /handoffClosedTransactionToAccounting/);
   assert.doesNotMatch(tcQueue, /handoffClosedTransactionToAccounting/);
   assert.doesNotMatch(staffQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
-  assert.match(staffQueue, /Only a deliberate Staff approval advances the same canonical transaction/);
-  assert.match(staffQueue, /action === 'approve' && item\.transactionId/);
+  assert.match(staffQueue, /A Staff approval is the sole gate from a closed canonical transaction into/);
+  assert.match(staffQueue, /The Staff Queue item was not approved/);
+  assert.match(staffQueue, /verified handoff to Accounting/);
+  assert.match(staffQueue, /accountingHandoff: \{ \.\.\.accountingHandoff, verified: true \}/);
   assert.match(route, /TC\/Staff closeout has not handed this transaction to Accounting yet/);
 });
 
