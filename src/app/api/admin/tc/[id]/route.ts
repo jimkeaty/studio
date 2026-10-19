@@ -24,6 +24,7 @@ import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroug
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
+import { hasOpenAccountingCloseout, isClosedTransactionStatus } from '@/lib/transactions/accountingCloseout';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -1360,6 +1361,56 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         updatedAt: now,
       });
 
+      // A TC approval that creates a file already marked Closed must still pass
+      // through the same Staff checkpoint as every other closed transaction.
+      // Do not send it directly to Accounting: Staff must verify the closeout
+      // before the separate Accounting review begins.
+      let staffCloseoutQueueItemId: string | null = null;
+      const canonicalAfterApproval = await adminDb.collection('transactions').doc(transactionId).get();
+      const canonicalAfterApprovalData = canonicalAfterApproval.data() as Record<string, any> | undefined;
+      if (
+        canonicalAfterApprovalData
+        && isClosedTransactionStatus(canonicalAfterApprovalData.status)
+        && !hasOpenAccountingCloseout(canonicalAfterApprovalData.accountingCloseout)
+      ) {
+        const relatedStaffQueue = await adminDb.collection('staffQueue')
+          .where('transactionId', '==', transactionId)
+          .get();
+        const hasActiveClosedReview = relatedStaffQueue.docs.some((queueDoc) => {
+          const queueItem = queueDoc.data() as Record<string, any>;
+          const queueStatus = String(queueItem.status || '').trim().toLowerCase();
+          return String(queueItem.newStatus || '').trim().toLowerCase() === 'closed'
+            && ['pending_review', 'in_progress'].includes(queueStatus);
+        });
+
+        if (!hasActiveClosedReview) {
+          const staffQueueRef = adminDb.collection('staffQueue').doc();
+          await staffQueueRef.set({
+            transactionId,
+            tcIntakeId: id,
+            agentId: canonicalAfterApprovalData.agentId || agentId || '',
+            agentName: canonicalAfterApprovalData.agentDisplayName || intake.agentDisplayName || 'Unknown Agent',
+            submittedBy: decoded.uid,
+            submittedByName: decoded.email || 'TC',
+            actionType: 'closed_tc_approval',
+            closingType: canonicalAfterApprovalData.closingType || intake.closingType || null,
+            previousStatus: null,
+            newStatus: 'closed',
+            notes: canonicalAfterApprovalData.notes || intake.notes || null,
+            tcWorking: true,
+            status: 'pending_review',
+            reviewedBy: null,
+            reviewedByName: null,
+            reviewedAt: null,
+            staffNotes: null,
+            address: canonicalAfterApprovalData.propertyAddress || canonicalAfterApprovalData.address || intake.address || intake.propertyAddress || null,
+            createdAt: now,
+            updatedAt: now,
+          });
+          staffCloseoutQueueItemId = staffQueueRef.id;
+        }
+      }
+
       // Rebuild rollups for both participants from the same preserved transaction.
       try {
         const { rebuildAgentRollup } = await import('@/lib/rollups/rebuildAgentRollup');
@@ -1390,6 +1441,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ok: true,
         status: 'approved',
         transactionId,
+        ...(staffCloseoutQueueItemId ? { staffCloseoutQueueItemId } : {}),
       });
     }
 

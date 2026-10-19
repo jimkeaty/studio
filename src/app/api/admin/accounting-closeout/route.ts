@@ -4,7 +4,10 @@ import { isAccountingUser } from '@/lib/auth/staffAccess';
 import { getTcUids } from '@/lib/notifications/getRecipientUids';
 import { sendNotification } from '@/lib/notifications/sendNotification';
 import {
+  ACCOUNTING_CLOSEOUT_QUERY_STATUSES,
   buildAccountingSnapshot,
+  isClosedTransactionStatus,
+  normalizeAccountingCloseoutStatus,
   requiredAccountingFieldsMissing,
   writeProcessingHistory,
   type AccountingActor,
@@ -62,17 +65,20 @@ export async function GET(req: NextRequest) {
     // instead of scanning an arbitrary limited subset of all Closed transactions;
     // otherwise newer handoffs can be omitted from the visible queue even though
     // their accountingCloseout record was successfully created.
-    const ACCOUNTING_QUEUE_STATUSES = ['new', 'in_progress', 'needs_information', 'completed', 'archived'];
     const snap = await adminDb.collection('transactions')
-      .where('accountingCloseout.status', 'in', ACCOUNTING_QUEUE_STATUSES)
+      .where('accountingCloseout.status', 'in', ACCOUNTING_CLOSEOUT_QUERY_STATUSES)
       .get();
     const items = snap.docs
       .map((doc) => {
         const transaction = doc.data() as Record<string, any>;
-        const accounting = transaction.accountingCloseout as Record<string, any> | undefined;
+        const savedAccounting = transaction.accountingCloseout as Record<string, any> | undefined;
+        const accountingStatus = normalizeAccountingCloseoutStatus(savedAccounting?.status);
+        const accounting: Record<string, any> | undefined = accountingStatus
+          ? { ...(savedAccounting || {}), status: accountingStatus }
+          : undefined;
         // A handoff is created only for a Closed transaction. Keep that workflow
         // invariant in the response in case a legacy record was later reopened.
-        if (isArchivedTransaction(transaction) || String(transaction.status || '').toLowerCase() !== 'closed' || !accounting || !accounting.status) return null;
+        if (isArchivedTransaction(transaction) || !isClosedTransactionStatus(transaction.status) || !accounting || !accounting.status) return null;
         const currentSnapshot = buildAccountingSnapshot(transaction, doc.id);
         const fieldOverrides = (accounting.fieldOverrides || {}) as Record<string, 'na'>;
         return {
@@ -115,8 +121,10 @@ export async function POST(req: NextRequest) {
     const txDoc = await txRef.get();
     if (!txDoc.exists) return error(404, 'Transaction not found');
     const transaction = txDoc.data() as Record<string, any>;
-    if (String(transaction.status || '').toLowerCase() !== 'closed') return error(400, 'Only closed transactions can be processed by Accounting');
-    const current = (transaction.accountingCloseout || {}) as Record<string, any>;
+    if (!isClosedTransactionStatus(transaction.status)) return error(400, 'Only closed transactions can be processed by Accounting');
+    const rawCurrent = (transaction.accountingCloseout || {}) as Record<string, any>;
+    const normalizedCurrentStatus = normalizeAccountingCloseoutStatus(rawCurrent.status);
+    const current = normalizedCurrentStatus ? { ...rawCurrent, status: normalizedCurrentStatus } : rawCurrent;
     if (!current.status) return error(400, 'TC/Staff closeout has not handed this transaction to Accounting yet');
 
     const now = new Date().toISOString();

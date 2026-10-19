@@ -66,6 +66,19 @@ test('a Closed save remains in Staff Queue until Staff approves it for Accountin
   assert.match(route, /TC\/Staff closeout has not handed this transaction to Accounting yet/);
 });
 
+test('status normalization cannot hide a valid Staff handoff and TC-created closed files enter Staff review first', () => {
+  assert.match(closeout, /ACCOUNTING_CLOSEOUT_QUERY_STATUSES/);
+  assert.match(closeout, /normalizeAccountingCloseoutStatus/);
+  assert.match(closeout, /isClosedTransactionStatus/);
+  assert.match(closeout, /status === 'new' \|\| status === 'in_progress' \|\| status === 'needs_information'/);
+  assert.match(route, /ACCOUNTING_CLOSEOUT_QUERY_STATUSES/);
+  assert.match(route, /isClosedTransactionStatus\(transaction\.status\)/);
+  assert.match(tcQueue, /closed_tc_approval/);
+  assert.match(tcQueue, /staffCloseoutQueueItemId/);
+  assert.match(tcQueue, /hasOpenAccountingCloseout/);
+  assert.doesNotMatch(tcQueue, /handoffClosedTransactionToAccounting/);
+});
+
 test('the accounting workflow is list-first, opens the full editor, and has no manual case assignment', () => {
   for (const action of ['needs_information', 'set_field_state', 'complete', 'reopen']) {
     assert.match(route, new RegExp(`action === '${action}'`));

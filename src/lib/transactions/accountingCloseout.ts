@@ -13,6 +13,27 @@ export type AccountingActor = {
   email: string;
 };
 
+export const ACCOUNTING_CLOSEOUT_STATUSES = ['new', 'in_progress', 'needs_information', 'completed', 'archived'] as const;
+export const ACCOUNTING_CLOSEOUT_QUERY_STATUSES = [
+  ...ACCOUNTING_CLOSEOUT_STATUSES,
+  'New',
+  'In Progress',
+  'Needs Information',
+  'Completed',
+  'Archived',
+] as const;
+
+export function normalizeAccountingCloseoutStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+  return ACCOUNTING_CLOSEOUT_STATUSES.includes(normalized as (typeof ACCOUNTING_CLOSEOUT_STATUSES)[number])
+    ? normalized as (typeof ACCOUNTING_CLOSEOUT_STATUSES)[number]
+    : null;
+}
+
+export function isClosedTransactionStatus(value: unknown) {
+  return String(value || '').trim().toLowerCase() === 'closed';
+}
+
 /**
  * An open Accounting closeout must never be replaced by a second handoff.
  * Completed and archived cases may be deliberately re-opened by a subsequent
@@ -20,8 +41,8 @@ export type AccountingActor = {
  */
 export function hasOpenAccountingCloseout(closeout: unknown): boolean {
   if (!closeout || typeof closeout !== 'object') return false;
-  const status = String((closeout as Record<string, any>).status || '').trim().toLowerCase();
-  return Boolean(status) && !['completed', 'archived'].includes(status);
+  const status = normalizeAccountingCloseoutStatus((closeout as Record<string, any>).status);
+  return status === 'new' || status === 'in_progress' || status === 'needs_information';
 }
 
 /**

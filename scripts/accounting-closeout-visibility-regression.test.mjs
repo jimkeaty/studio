@@ -7,14 +7,11 @@ const routePath = new URL('../src/app/api/admin/accounting-closeout/route.ts', i
 test('Accounting Queue uses the canonical accounting handoff status as its listing index', async () => {
   const source = await readFile(routePath, 'utf8');
 
+  assert.match(source, /ACCOUNTING_CLOSEOUT_QUERY_STATUSES/,
+    'all valid and legacy-cased accounting workflow states must be queryable');
   assert.match(
     source,
-    /const ACCOUNTING_QUEUE_STATUSES = \['new', 'in_progress', 'needs_information', 'completed', 'archived'\]/,
-    'all valid accounting workflow states must be queryable',
-  );
-  assert.match(
-    source,
-    /\.where\('accountingCloseout\.status', 'in', ACCOUNTING_QUEUE_STATUSES\)/,
+    /\.where\('accountingCloseout\.status', 'in', ACCOUNTING_CLOSEOUT_QUERY_STATUSES\)/,
     'the Accounting Queue must query the saved handoff state directly',
   );
   assert.doesNotMatch(
@@ -24,7 +21,7 @@ test('Accounting Queue uses the canonical accounting handoff status as its listi
   );
   assert.match(
     source,
-    /String\(transaction\.status \|\| ''\)\.toLowerCase\(\) !== 'closed'/,
+    /!isClosedTransactionStatus\(transaction\.status\)/,
     'the response must retain the closed-transaction invariant after the direct handoff query',
   );
 });

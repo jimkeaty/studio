@@ -10,6 +10,7 @@ const admin = read('src/app/api/admin/transactions/route.ts');
 const staff = read('src/app/api/admin/staff-queue/[itemId]/route.ts');
 const tc = read('src/app/api/admin/tc/[id]/route.ts');
 const intake = read('src/app/api/tc/route.ts');
+const loader = read('src/lib/client/leafletLoader.ts');
 
 test('sign placement supports an optional typed address, nearby-place search, manual map placement, movable pin, exact coordinates, and dedicated notes', () => {
   assert.match(picker, /nominatim\.openstreetmap\.org\/search/);
@@ -27,7 +28,21 @@ test('sign placement supports an optional typed address, nearby-place search, ma
 test('coordinates generate a direct installer navigation link while preserving a separately typed placement address', () => {
   assert.match(picker, /google\.com\/maps\/dir/);
   assert.match(picker, /Open Sign Location/);
-  assert.match(picker, /onChange\(\{ address: query, latitude/);
+  assert.match(picker, /onChange\(\{\s*address: query,/);
+});
+
+test('the map keeps the latest valid pin after delayed loading, drag, hydration, and a transient library failure', () => {
+  assert.match(picker, /function parseCoordinates/);
+  assert.match(picker, /coordinatesRef\.current = coordinates/);
+  assert.match(picker, /const latestCoordinates = coordinatesRef\.current/);
+  assert.match(picker, /syncMapRef\.current\?\.\(\)/);
+  assert.match(picker, /marker\.on\('dragend'/);
+  assert.match(picker, /setSearch\(address\)/);
+  assert.match(picker, /parsedLatitude < -90/);
+  assert.match(picker, /parsedLongitude > 180/);
+  assert.match(loader, /LEAFLET_LOAD_TIMEOUT_MS/);
+  assert.match(loader, /window\.__smartBrokerLeafletLoader = undefined/);
+  assert.match(loader, /Map library timed out while loading/);
 });
 
 test('the canonical unified form hydrates, displays, and submits persistent sign placement values without replacing prior sign-order instructions', () => {

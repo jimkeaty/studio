@@ -48,6 +48,6 @@ test('Accounting Queue offers a detailed transaction view without creating a sec
 });
 
 test('Accounting Queue remains an index of canonical Closed transactions only', () => {
-  assert.match(route, /String\(transaction\.status \|\| ''\)\.toLowerCase\(\) !== 'closed'/);
+  assert.match(route, /!isClosedTransactionStatus\(transaction\.status\)/);
   assert.match(route, /buildAccountingSnapshot\(transaction, doc\.id\)/);
 });
