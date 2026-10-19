@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
             url: String(d.url),
             storagePath: String(d.storagePath || ''),
             uploadedAt: String(d.uploadedAt || now.toISOString()),
+            ...(d.documentCategory === 'listing_media' ? { documentCategory: 'listing_media' } : {}),
           }))
       : [];
 

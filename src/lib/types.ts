@@ -218,7 +218,14 @@ export interface Transaction {
   buyerBringToClosing?: number | null;
   additionalComments?: string | null;
   // Documents
-  documents?: Array<{ url: string; name: string; storagePath?: string; uploadedAt?: string }>;
+  documents?: Array<{
+    url: string;
+    name: string;
+    storagePath?: string;
+    uploadedAt?: string;
+    /** Existing listing photos uploaded for Staff to review and add to MLS. */
+    documentCategory?: 'listing_media';
+  }>;
   // Legacy fields
   userId?: string;
   netCommission?: number;

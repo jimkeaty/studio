@@ -753,10 +753,18 @@ export default function AddTransactionPage() {
   // ── Document upload state — MUST be declared before PDF upload handlers ──────
   // These handlers call setUploadedDocs; if the state is declared after them,
   // the closures capture a stale/undefined reference and uploads are silently lost.
-  type UploadedDoc = { name: string; url: string; storagePath: string; uploadedAt: string };
+  type UploadedDoc = {
+    name: string;
+    url: string;
+    storagePath: string;
+    uploadedAt: string;
+    /** Existing photos supplied for Staff to add to the MLS listing. */
+    documentCategory?: 'listing_media';
+  };
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [docUploading, setDocUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const listingMediaInputRef = useRef<HTMLInputElement>(null);
 
   const handlePdfUpload = async (file: File) => {
     if (!user) return;
@@ -1261,12 +1269,16 @@ export default function AddTransactionPage() {
     }
   };
 
-  const handleDocUpload = async (files: FileList | null) => {
+  const handleDocUpload = async (
+    files: FileList | null,
+    documentCategory?: UploadedDoc['documentCategory'],
+  ) => {
     if (!files || !user) return;
+    const selectedFiles = Array.from(files);
     setDocUploading(true);
     try {
       const token = await user.getIdToken();
-      for (const file of Array.from(files)) {
+      for (const file of selectedFiles) {
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch('/api/agent/transactions/upload-document', {
@@ -1280,7 +1292,13 @@ export default function AddTransactionPage() {
         } else {
           setUploadedDocs((prev) => [
             ...prev,
-            { name: data.name, url: data.url, storagePath: data.storagePath, uploadedAt: data.uploadedAt },
+            {
+              name: data.name,
+              url: data.url,
+              storagePath: data.storagePath,
+              uploadedAt: data.uploadedAt,
+              ...(documentCategory ? { documentCategory } : {}),
+            },
           ]);
         }
       }
@@ -1289,6 +1307,7 @@ export default function AddTransactionPage() {
     } finally {
       setDocUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (listingMediaInputRef.current) listingMediaInputRef.current.value = '';
     }
   };
 
@@ -2834,6 +2853,7 @@ export default function AddTransactionPage() {
               url,
               storagePath,
               uploadedAt: String(doc.uploadedAt || doc.createdAt || ''),
+              ...(doc.documentCategory === 'listing_media' ? { documentCategory: 'listing_media' as const } : {}),
             };
           })
           .filter((doc: UploadedDoc | null): doc is UploadedDoc => Boolean(doc));
@@ -5959,31 +5979,87 @@ export default function AddTransactionPage() {
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={mediaOrderOpen} onOpenChange={setMediaOrderOpen}>
               <Card>
-                <CardHeader className="py-4">
+                <CardHeader
+                  className="cursor-pointer select-none py-4"
+                  onClick={() => setMediaOrderOpen(!mediaOrderOpen)}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">Media Order</CardTitle>
-                      <CardDescription>Order media directly through Media Engage for this listing.</CardDescription>
+                      <CardDescription>Order new media or upload existing listing photos for Staff to add to MLS.</CardDescription>
                     </div>
-                    <span className="text-2xl">📸</span>
+                    <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mediaOrderOpen ? 'rotate-180' : ''}`} />
                   </div>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
-                    <div>
-                      <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form.</p>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4 pt-0">
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-5 flex flex-col items-center gap-4 text-center">
+                      <div>
+                        <p className="font-semibold text-blue-900 dark:text-blue-200 text-base mb-1">Order Media Through Media Engage</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">All media orders are placed directly through Media Engage. Click below to open their order form.</p>
+                      </div>
+                      <a
+                        href="https://mediaengagellc.com/order/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
+                      >
+                        📷 Order Media at Media Engage
+                      </a>
                     </div>
-                    <a
-                      href="https://mediaengagellc.com/order/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-md bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6 py-3 text-sm transition-colors"
-                    >
-                      📷 Order Media at Media Engage
-                    </a>
-                  </div>
-                </CardContent>
+
+                    <div className="rounded-lg border border-dashed border-primary/40 bg-muted/30 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-medium">Already have listing photos?</p>
+                          <p className="text-sm text-muted-foreground">Upload them here for Staff to review and add to MLS. They are saved with this transaction; uploading does not publish anything automatically.</p>
+                        </div>
+                        <input
+                          ref={listingMediaInputRef}
+                          type="file"
+                          multiple
+                          accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic"
+                          className="hidden"
+                          onChange={(event) => handleDocUpload(event.target.files, 'listing_media')}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={docUploading}
+                          onClick={() => listingMediaInputRef.current?.click()}
+                          className="shrink-0 gap-2"
+                        >
+                          {docUploading ? (
+                            <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
+                          ) : (
+                            <><UploadCloud className="h-4 w-4" /> Upload Existing Photos</>
+                          )}
+                        </Button>
+                      </div>
+
+                      {uploadedDocs.some((doc) => doc.documentCategory === 'listing_media') && (
+                        <div className="mt-4 space-y-2 border-t pt-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing listing photos for Staff / MLS</p>
+                          {uploadedDocs.filter((doc) => doc.documentCategory === 'listing_media').map((doc) => (
+                            <div key={doc.storagePath} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2">
+                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sm font-medium text-primary hover:underline">{doc.name}</a>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeDoc(doc.storagePath)}
+                              >
+                                <X className="h-4 w-4" />
+                                <span className="sr-only">Remove {doc.name}</span>
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
               </Card>
             </Collapsible>
           )}

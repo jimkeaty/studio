@@ -79,6 +79,15 @@ test('reopened shared transaction forms hydrate and submit their document list',
   assert.match(adminRouteSource, /'documents'/);
 });
 
+test('listing media uploads are visibly separate from paperwork and retain their Staff/MLS label through create and reopen', () => {
+  assert.match(formSource, /documentCategory\?: 'listing_media'/);
+  assert.match(formSource, /Upload Existing Photos/);
+  assert.match(formSource, /Existing listing photos for Staff \/ MLS/);
+  assert.match(formSource, /handleDocUpload\(event\.target\.files, 'listing_media'\)/);
+  assert.match(formSource, /doc\.documentCategory === 'listing_media'/);
+  assert.match(createTransactionSource, /d\.documentCategory === 'listing_media' \? \{ documentCategory: 'listing_media' \} : \{\}/);
+});
+
 test('listing lifecycle dates remain visible and hydrate after a listing becomes Pending', () => {
   assert.match(formSource, /listingDate: tx\.listingDate \|\| tx\.listDate \|\| ''/);
   assert.match(formSource, /listingExpirationDate: tx\.listingExpirationDate \|\| tx\.expirationDate \|\| tx\.listingExpiration \|\| ''/);
