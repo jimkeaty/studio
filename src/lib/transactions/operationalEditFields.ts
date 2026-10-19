@@ -23,7 +23,7 @@ export const OPERATIONAL_TRANSACTION_FORM_FIELDS = [
   'financingCommitmentDays', 'dueDiligenceDays', 'titleCurativeDays', 'closingDays',
   'buyerCommissionPct', 'sellerCommissionPct',
   'loanOfficeNumber', 'loanOfficerStreet', 'titleOfficerStreet',
-  'mediaRequested',
+  'mediaRequested', 'listingMediaFolderUrl',
   'signInstallDate', 'signRider', 'signNotes',
   'showingLeadTime', 'showingLockboxCode', 'showingAlarmCode',
   'showingCallOrder1Name', 'showingCallOrder1Phone', 'showingCallOrder1Mobile',

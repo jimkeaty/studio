@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const formSource = readFileSync(resolve(root, 'src/app/dashboard/transactions/new/page.tsx'), 'utf8');
 const agentRouteSource = readFileSync(resolve(root, 'src/app/api/agent/transactions/[txId]/route.ts'), 'utf8');
 const adminRouteSource = readFileSync(resolve(root, 'src/app/api/admin/transactions/route.ts'), 'utf8');
+const legacyAdminCreateSource = readFileSync(resolve(root, 'src/app/api/transactions/route.ts'), 'utf8');
 const brokerFeeSettingsSource = readFileSync(resolve(root, 'src/app/api/admin/transaction-fee-settings/route.ts'), 'utf8');
 const createTransactionSource = readFileSync(resolve(root, 'src/app/api/tc/route.ts'), 'utf8');
 const commercialParserSource = readFileSync(resolve(root, 'src/app/api/agent/parse-commercial-agreement/route.ts'), 'utf8');
@@ -17,6 +18,7 @@ const transactionSectionsSource = readFileSync(resolve(root, 'src/components/tra
 const transactionReminderSource = readFileSync(resolve(root, 'src/app/api/cron/transaction-reminders/route.ts'), 'utf8');
 const contactsRouteSource = readFileSync(resolve(root, 'src/app/api/contacts/route.ts'), 'utf8');
 const tcApprovalSource = readFileSync(resolve(root, 'src/app/api/admin/tc/[id]/route.ts'), 'utf8');
+const staffQueueSource = readFileSync(resolve(root, 'src/app/api/admin/staff-queue/[itemId]/route.ts'), 'utf8');
 const trainingArticlesSource = readFileSync(resolve(root, 'src/lib/training/articles.ts'), 'utf8');
 const aphwInvitationSource = readFileSync(resolve(root, 'src/lib/home-warranty/sendAphwEducationInvite.ts'), 'utf8');
 const agentRollupSource = readFileSync(resolve(root, 'src/lib/rollups/rebuildAgentRollup.ts'), 'utf8');
@@ -79,13 +81,17 @@ test('reopened shared transaction forms hydrate and submit their document list',
   assert.match(adminRouteSource, /'documents'/);
 });
 
-test('listing media uploads are visibly separate from paperwork and retain their Staff/MLS label through create and reopen', () => {
-  assert.match(formSource, /documentCategory\?: 'listing_media'/);
-  assert.match(formSource, /Upload Existing Photos/);
-  assert.match(formSource, /Existing listing photos for Staff \/ MLS/);
-  assert.match(formSource, /handleDocUpload\(event\.target\.files, 'listing_media'\)/);
-  assert.match(formSource, /doc\.documentCategory === 'listing_media'/);
-  assert.match(createTransactionSource, /d\.documentCategory === 'listing_media' \? \{ documentCategory: 'listing_media' \} : \{\}/);
+test('listing media uses a secure shared-folder link that persists through every transaction editor', () => {
+  assert.match(formSource, /const optionalHttpsUrl/);
+  assert.match(formSource, /listingMediaFolderUrl: optionalHttpsUrl/);
+  assert.match(formSource, /Existing Listing Media Folder Link/);
+  assert.match(formSource, /Open shared listing media folder/);
+  assert.match(formSource, /listingMediaFolderUrl: tx\.listingMediaFolderUrl \|\| ''/);
+  assert.match(createTransactionSource, /listingMediaFolderUrl: normalizeListingMediaFolderUrl\(body\.listingMediaFolderUrl\)/);
+  for (const source of [agentRouteSource, adminRouteSource, legacyAdminCreateSource, staffQueueSource, tcApprovalSource]) {
+    assert.match(source, /listingMediaFolderUrl/);
+    assert.match(source, /normalizeListingMediaFolderUrl/);
+  }
 });
 
 test('listing lifecycle dates remain visible and hydrate after a listing becomes Pending', () => {

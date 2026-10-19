@@ -135,6 +135,8 @@ export interface Transaction {
   transactionFee?: number;
   earnestMoney?: number;
   listingDate?: string | null;
+  /** Staff-shared Google Drive, Dropbox, OneDrive, or similar listing-media folder. */
+  listingMediaFolderUrl?: string | null;
   optionExpiration?: string | null;
   inspectionDeadline?: string | null;
   surveyDeadline?: string | null;

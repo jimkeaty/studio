@@ -14,6 +14,7 @@ import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
 import { applyReferralIncomeFinancials, isReferralIncomeTransaction } from '@/lib/transactions/referralIncome';
 import { resolveTransactionCalculation } from '@/app/api/transactions/_lib/teamTransactionResolver';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || '';
@@ -348,6 +349,7 @@ export async function POST(req: NextRequest) {
       mediaTypes: toArr(body.mediaTypes),
       mediaRequestedDate: toStr(body.mediaRequestedDate) || null,
       mediaNotes: toStr(body.mediaNotes) || null,
+      listingMediaFolderUrl: normalizeListingMediaFolderUrl(body.listingMediaFolderUrl),
 
       // Sign order — infer requested from presence of signServiceType if explicit flag not set
       signOrderRequested: toBool(body.signOrderRequested) || !!(toStr(body.signServiceType)),

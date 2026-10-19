@@ -26,6 +26,7 @@ import {
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -86,7 +87,7 @@ const EDITABLE_TX_FIELDS = new Set([
   'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
   'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
   // Media order
-  'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+  'mediaTypes', 'mediaRequestedDate', 'mediaNotes', 'listingMediaFolderUrl',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
   'signRequestedDate', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
@@ -320,6 +321,9 @@ export async function PATCH(
       const allowed: Record<string, any> = {};
       for (const [k, v] of Object.entries(txUpdates)) {
         if (EDITABLE_TX_FIELDS.has(k)) allowed[k] = v;
+      }
+      if (Object.prototype.hasOwnProperty.call(allowed, 'listingMediaFolderUrl')) {
+        allowed.listingMediaFolderUrl = normalizeListingMediaFolderUrl(allowed.listingMediaFolderUrl);
       }
 
       if (Object.keys(allowed).length > 0) {

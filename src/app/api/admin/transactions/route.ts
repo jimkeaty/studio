@@ -26,6 +26,7 @@ import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { archiveCanonicalTransaction, isArchivedTransaction, restoreCanonicalTransaction } from '@/lib/transactions/archiveTransaction';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -320,6 +321,8 @@ const UPDATABLE_FIELDS = new Set([
   // Pre-listing inspection
   'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectionTypes',
   'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther', 'preListingInspectorName',
+  // Shared existing listing-media folder
+  'listingMediaFolderUrl',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signInstallDate', 'signRider',
   'signAdditionalOptions', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
@@ -396,6 +399,9 @@ export async function PATCH(req: NextRequest) {
       if (UPDATABLE_FIELDS.has(key)) {
         updates[key] = value;
       }
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'listingMediaFolderUrl')) {
+      updates.listingMediaFolderUrl = normalizeListingMediaFolderUrl(updates.listingMediaFolderUrl);
     }
 
     // Direct API callers receive the same guard as the unified form: a manual

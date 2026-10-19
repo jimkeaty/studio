@@ -19,6 +19,7 @@ import { hasTransactionVersionConflict, normalizeTransactionVersion } from '@/li
 import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperatingCommission';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -93,7 +94,7 @@ const AGENT_ALLOWED_FIELDS = new Set([
   'preListingInspectionOrdered', 'preListingTargetInspectionDate', 'preListingInspectorName',
   'preListingInspectionTypes', 'preListingTcScheduleInspections', 'preListingTcScheduleInspectionsOther',
   // Media order
-  'mediaRequested', 'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+  'mediaRequested', 'mediaTypes', 'mediaRequestedDate', 'mediaNotes', 'listingMediaFolderUrl',
   // Sign order
   'signOrderRequested', 'signServiceType', 'signInstallDate', 'signOwnerName',
   'signRider', 'signAdditionalOptions', 'signSpecialRequests', 'signPlacementAddress',
@@ -314,6 +315,9 @@ export async function PATCH(
       if (AGENT_ALLOWED_FIELDS.has(k)) {
         updates[k] = v;
       }
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'listingMediaFolderUrl')) {
+      updates.listingMediaFolderUrl = normalizeListingMediaFolderUrl(updates.listingMediaFolderUrl);
     }
     // Do this before validation and split calculation. Referral income has zero
     // property-side production but uses its received fee as normal split GCI.

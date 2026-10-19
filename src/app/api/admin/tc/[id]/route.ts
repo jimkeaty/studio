@@ -23,6 +23,7 @@ import {
 import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroughFinancialPolicy';
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -438,7 +439,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         'inspectionOrdered', 'targetInspectionDate', 'inspectionTypes',
         'tcScheduleInspections', 'tcScheduleInspectionsOther', 'inspectorName',
         // Media order
-        'mediaTypes', 'mediaRequestedDate', 'mediaNotes',
+        'mediaTypes', 'mediaRequestedDate', 'mediaNotes', 'listingMediaFolderUrl',
         // Sign order
         'signOrderRequested', 'signServiceType', 'signAdditionalOptions', 'signRiderExt',
         'signRequestedDate', 'signOwnerName', 'signSpecialRequests', 'signPlacementAddress',
@@ -497,7 +498,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           } else {
             updates[field] = val === '' || val === null ? null : val;
           }
-          }
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'listingMediaFolderUrl')) {
+        updates.listingMediaFolderUrl = normalizeListingMediaFolderUrl(updates.listingMediaFolderUrl);
       }
       synchronizeOperationalCloseDate(updates);
       Object.assign(updates, applyReferralIncomeFinancials(intake, updates));
@@ -1180,6 +1184,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         titleOfficerPhone: toOptStr(intake.titleOfficerPhone),
         titleAttorney: toOptStr(intake.titleAttorney),
         titleOffice: toOptStr(intake.titleOffice),
+
+        // Existing listing photos remain in the agent's shared folder for Staff
+        // MLS review rather than being duplicated into Firestore Storage.
+        listingMediaFolderUrl: normalizeListingMediaFolderUrl(intake.listingMediaFolderUrl),
 
         // Compliance / warranty
         warrantyPaidBy: toOptStr(intake.warrantyPaidBy),

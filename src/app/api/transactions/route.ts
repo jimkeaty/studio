@@ -8,6 +8,7 @@ import { buildCoAgentAllocationUpdate } from '@/lib/transactions/syncCoAgentAllo
 import { resolveOutboundReferral } from '@/lib/transactions/outboundReferral'
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation'
 import { applyReferralIncomeFinancials, isReferralIncomeTransaction } from '@/lib/transactions/referralIncome'
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder'
 
 function extractBearer(req: NextRequest) {
   const h = req.headers.get('Authorization') || ''
@@ -306,6 +307,9 @@ export async function POST(req: NextRequest) {
       ...(body.depositHolder ? { depositHolder: body.depositHolder } : {}),
       ...(body.depositHolderOther ? { depositHolderOther: body.depositHolderOther } : {}),
       ...(body.listingDate ? { listingDate: body.listingDate } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, 'listingMediaFolderUrl')
+        ? { listingMediaFolderUrl: normalizeListingMediaFolderUrl(body.listingMediaFolderUrl) }
+        : {}),
       ...(body.optionExpiration ? { optionExpiration: body.optionExpiration } : {}),
       ...(body.inspectionDeadline ? { inspectionDeadline: body.inspectionDeadline } : {}),
       ...(body.surveyDeadline ? { surveyDeadline: body.surveyDeadline } : {}),

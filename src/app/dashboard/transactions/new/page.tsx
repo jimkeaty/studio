@@ -45,6 +45,7 @@ import { optionalSelect, optionalStringArray } from '@/lib/transactions/optional
 import { validateCoAgentSplit } from '@/lib/transactions/coAgentSplitValidation';
 import { resolveSavedFlatDollarCommission } from '@/lib/transactions/commissionMethodRecovery';
 import { resolveCooperatingCommissionForEditor } from '@/lib/transactions/cooperatingCommission';
+import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 import { hasExplicitCommissionBaseOverride } from '@/lib/transactions/commissionBaseHydration';
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -346,6 +347,10 @@ const optionalCooperatingCommissionMethod = optionalSelect(['percentage', 'flat_
 const optionalCommissionMode = optionalSelect(['percent', 'flat']);
 const optionalFeeAllocation = optionalSelect(['primary_agent', 'co_agent', 'split_equal', 'custom']);
 const optionalCoAgentRole = optionalSelect(['co_list', 'co_buyer', 'co_both', 'referral', 'other']);
+const optionalHttpsUrl = z.string().trim().refine(
+  (value) => value === '' || normalizeListingMediaFolderUrl(value) !== null,
+  { message: 'Use a complete HTTPS folder link, such as https://drive.google.com/…' },
+).optional();
 
 const schema = z.object({
   // Agent
@@ -515,6 +520,7 @@ const schema = z.object({
   mediaTypes: optionalStringArray,
   mediaRequestedDate: z.string().optional().or(z.literal('')),
   mediaNotes: z.string().optional(),
+  listingMediaFolderUrl: optionalHttpsUrl,
   // MLS Description Builder (listing-only)
   mlsDescription: z.string().optional(),
   // Sign Order (listing-only)
@@ -764,7 +770,6 @@ export default function AddTransactionPage() {
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [docUploading, setDocUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const listingMediaInputRef = useRef<HTMLInputElement>(null);
 
   const handlePdfUpload = async (file: File) => {
     if (!user) return;
@@ -1269,10 +1274,7 @@ export default function AddTransactionPage() {
     }
   };
 
-  const handleDocUpload = async (
-    files: FileList | null,
-    documentCategory?: UploadedDoc['documentCategory'],
-  ) => {
+  const handleDocUpload = async (files: FileList | null) => {
     if (!files || !user) return;
     const selectedFiles = Array.from(files);
     setDocUploading(true);
@@ -1297,7 +1299,6 @@ export default function AddTransactionPage() {
               url: data.url,
               storagePath: data.storagePath,
               uploadedAt: data.uploadedAt,
-              ...(documentCategory ? { documentCategory } : {}),
             },
           ]);
         }
@@ -1307,7 +1308,6 @@ export default function AddTransactionPage() {
     } finally {
       setDocUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      if (listingMediaInputRef.current) listingMediaInputRef.current.value = '';
     }
   };
 
@@ -1536,6 +1536,7 @@ export default function AddTransactionPage() {
       referralExpectedFee: '',
       referralActualFeeReceived: '',
       referralFeeReceivedDate: '',
+      listingMediaFolderUrl: '',
     },
   });
   const [, setBrokerFeeDefaults] = useState<{ buyerDefault: number; listingDefault: number } | null>(null);
@@ -1548,6 +1549,9 @@ export default function AddTransactionPage() {
   const preListingInspectionOrdered = form.watch('preListingInspectionOrdered');
   const preListingTcScheduleInspections = form.watch('preListingTcScheduleInspections');
   const mediaTypes = form.watch('mediaTypes') || [];
+  const listingMediaFolderUrl = form.watch('listingMediaFolderUrl') || '';
+  const normalizedListingMediaFolderUrl = normalizeListingMediaFolderUrl(listingMediaFolderUrl);
+  const hasListingMediaFolderLink = normalizedListingMediaFolderUrl !== null;
   const signOrderRequested = form.watch('signOrderRequested');
   const signServiceType = form.watch('signServiceType');
   const signAdditionalOptions = form.watch('signAdditionalOptions') || [];
@@ -2778,6 +2782,7 @@ export default function AddTransactionPage() {
           mediaTypes: tx.mediaTypes || [],
           mediaRequestedDate: tx.mediaRequestedDate || '',
           mediaNotes: tx.mediaNotes || '',
+          listingMediaFolderUrl: tx.listingMediaFolderUrl || '',
           mlsDescription: tx.mlsDescription || '',
           additionalNotes: tx.additionalNotes || '',
           additionalComments: tx.additionalComments || '',
@@ -5986,7 +5991,7 @@ export default function AddTransactionPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-base">Media Order</CardTitle>
-                      <CardDescription>Order new media or upload existing listing photos for Staff to add to MLS.</CardDescription>
+                      <CardDescription>Order new media or share an existing listing-media folder with Staff for MLS.</CardDescription>
                     </div>
                     <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${mediaOrderOpen ? 'rotate-180' : ''}`} />
                   </div>
@@ -6009,53 +6014,26 @@ export default function AddTransactionPage() {
                     </div>
 
                     <div className="rounded-lg border border-dashed border-primary/40 bg-muted/30 p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-medium">Already have listing photos?</p>
-                          <p className="text-sm text-muted-foreground">Upload them here for Staff to review and add to MLS. They are saved with this transaction; uploading does not publish anything automatically.</p>
-                        </div>
-                        <input
-                          ref={listingMediaInputRef}
-                          type="file"
-                          multiple
-                          accept=".jpg,.jpeg,.png,.webp,.heic,image/jpeg,image/png,image/webp,image/heic"
-                          className="hidden"
-                          onChange={(event) => handleDocUpload(event.target.files, 'listing_media')}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={docUploading}
-                          onClick={() => listingMediaInputRef.current?.click()}
-                          className="shrink-0 gap-2"
+                      <FormField control={form.control} name="listingMediaFolderUrl" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Existing Listing Media Folder Link</FormLabel>
+                          <FormControl>
+                            <Input type="url" inputMode="url" placeholder="https://drive.google.com/..." {...field} />
+                          </FormControl>
+                          <FormDescription>
+                            Paste a shared Google Drive, Dropbox, OneDrive, or other HTTPS folder link. Make sure Staff/MLS has permission to view the folder; this does not publish media automatically.
+                          </FormDescription>
+                        </FormItem>
+                      )} />
+                      {hasListingMediaFolderLink && (
+                        <a
+                          href={normalizedListingMediaFolderUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex text-sm font-medium text-primary underline"
                         >
-                          {docUploading ? (
-                            <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
-                          ) : (
-                            <><UploadCloud className="h-4 w-4" /> Upload Existing Photos</>
-                          )}
-                        </Button>
-                      </div>
-
-                      {uploadedDocs.some((doc) => doc.documentCategory === 'listing_media') && (
-                        <div className="mt-4 space-y-2 border-t pt-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Existing listing photos for Staff / MLS</p>
-                          {uploadedDocs.filter((doc) => doc.documentCategory === 'listing_media').map((doc) => (
-                            <div key={doc.storagePath} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2">
-                              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sm font-medium text-primary hover:underline">{doc.name}</a>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-destructive"
-                                onClick={() => removeDoc(doc.storagePath)}
-                              >
-                                <X className="h-4 w-4" />
-                                <span className="sr-only">Remove {doc.name}</span>
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
+                          Open shared listing media folder
+                        </a>
                       )}
                     </div>
                   </CardContent>
