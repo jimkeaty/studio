@@ -33,6 +33,7 @@ test('coordinates generate a direct installer navigation link while preserving a
 
 test('the map keeps the latest valid pin after delayed loading, drag, hydration, and a transient library failure', () => {
   assert.match(picker, /function parseCoordinates/);
+  assert.match(picker, /if \(!latitudeText \|\| !longitudeText\) return null/);
   assert.match(picker, /coordinatesRef\.current = coordinates/);
   assert.match(picker, /const latestCoordinates = coordinatesRef\.current/);
   assert.match(picker, /syncMapRef\.current\?\.\(\)/);

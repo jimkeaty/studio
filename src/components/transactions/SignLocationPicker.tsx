@@ -20,8 +20,12 @@ type Coordinates = { latitude: number; longitude: number };
 const LAFAYETTE = { latitude: 30.2241, longitude: -92.0198 };
 
 function parseCoordinates(latitude: string, longitude: string): Coordinates | null {
-  const parsedLatitude = Number(String(latitude || '').trim());
-  const parsedLongitude = Number(String(longitude || '').trim());
+  const latitudeText = String(latitude || '').trim();
+  const longitudeText = String(longitude || '').trim();
+  if (!latitudeText || !longitudeText) return null;
+
+  const parsedLatitude = Number(latitudeText);
+  const parsedLongitude = Number(longitudeText);
   if (
     !Number.isFinite(parsedLatitude)
     || !Number.isFinite(parsedLongitude)
