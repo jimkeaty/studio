@@ -533,7 +533,7 @@ export async function PATCH(
     // Accounting. Determine whether the current canonical record is Closed only
     // after applying the Staff edits above; a Staff member can correctly close a
     // file and release it in the same save-and-approval operation.
-    let accountingHandoff: { status: string; newlyCreated: boolean } | null = null;
+    let accountingHandoff: { status: string; newlyCreated: boolean; notificationPending: boolean } | null = null;
     const isStaffReleaseAction = action === 'approve' || action === 'complete';
     let shouldVerifyAccountingHandoff = false;
     if (isStaffReleaseAction && item.transactionId) {
@@ -670,6 +670,7 @@ export async function PATCH(
         accountingHandoff = {
           status: String(handoffResult.accountingCloseout.status),
           newlyCreated: handoffResult.newlyCreated,
+          notificationPending: handoffResult.notificationPending,
         };
         staffReleaseWasAtomicallyCommitted = true;
       } catch (accountingError: any) {
@@ -737,26 +738,41 @@ export async function PATCH(
     // Send the designated Accounting notification only after the Staff approval
     // and the canonical accounting handoff have both persisted. Notification
     // failure remains non-blocking; it does not change the durable queue state.
-    if (accountingHandoff?.newlyCreated && item.transactionId) {
-      void (async () => {
-        try {
-          const accountingUids = await getDesignatedAccountingUids(adminDb);
-          if (accountingUids.length > 0) {
-            const txDocForNotification = await adminDb.collection('transactions').doc(String(item.transactionId)).get();
-            const txAddress = String(txDocForNotification.data()?.propertyAddress || txDocForNotification.data()?.address || 'a closed transaction');
-            await sendNotification(adminDb, {
-              type: 'accounting_closeout_new',
-              recipientUids: accountingUids,
-              title: 'New Accounting Closeout',
-              body: `${txAddress} is ready for Accounting review.`,
-              url: `/dashboard/admin/accounting?transactionId=${item.transactionId}`,
-              data: { transactionId: item.transactionId },
-            });
-          }
-        } catch (notificationError: any) {
-          console.error('[staff-queue PATCH] Accounting notification error:', notificationError?.message);
+    if (accountingHandoff?.notificationPending && item.transactionId) {
+      try {
+        const accountingUids = await getDesignatedAccountingUids(adminDb);
+        if (accountingUids.length > 0) {
+          const transactionId = String(item.transactionId);
+          const txDocForNotification = await adminDb.collection('transactions').doc(transactionId).get();
+          const txAddress = String(txDocForNotification.data()?.propertyAddress || txDocForNotification.data()?.address || 'a closed transaction');
+          // Await the dispatcher before returning. App Hosting may end detached
+          // background work after the HTTP response, which made a successful
+          // Staff handoff appear without the promised Accounting alert.
+          await sendNotification(adminDb, {
+            type: 'accounting_closeout_new',
+            recipientUids: accountingUids,
+            title: 'New Accounting Closeout',
+            body: `${txAddress} is ready for Accounting review.`,
+            url: `/dashboard/admin/accounting?transactionId=${transactionId}`,
+            data: { transactionId },
+          });
+          // This is a dispatch receipt—not a claim that any optional external
+          // channel was delivered. It allows retries after an interrupted
+          // request while preventing routine repeat Staff approvals from
+          // producing duplicate Accounting alerts.
+          await adminDb.collection('transactions').doc(transactionId).update({
+            'accountingCloseout.notificationPending': false,
+            'accountingCloseout.notificationDispatchedAt': new Date().toISOString(),
+            'accountingCloseout.notificationRecipientCount': accountingUids.length,
+            'accountingCloseout.updatedAt': new Date().toISOString(),
+          });
         }
-      })();
+      } catch (notificationError: any) {
+        // Notification delivery never reverses the durable Staff-to-Accounting
+        // handoff. The pending marker remains true so an authorized repeat
+        // approval can retry it instead of silently losing the alert.
+        console.error('[staff-queue PATCH] Accounting notification error:', notificationError?.message);
+      }
     }
 
     // ── Notify TC of staff queue actions ────────────────────────────────────────────

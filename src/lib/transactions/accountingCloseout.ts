@@ -22,6 +22,7 @@ export type AccountingStaffApproval = {
 export type AccountingHandoffResult = {
   accountingCloseout: Record<string, any>;
   newlyCreated: boolean;
+  notificationPending: boolean;
 };
 
 export const ACCOUNTING_CLOSEOUT_STATUSES = ['new', 'in_progress', 'needs_information', 'completed', 'archived'] as const;
@@ -428,8 +429,15 @@ export async function handoffClosedTransactionToAccounting(
     const current = (transaction.accountingCloseout || {}) as Record<string, any>;
     const alreadyOpen = hasOpenAccountingCloseout(current);
     const now = new Date().toISOString();
-    const accountingCloseout = alreadyOpen
-      ? current
+    const accountingCloseout: Record<string, any> = alreadyOpen
+      ? {
+        ...current,
+        // Historic open handoffs may have been written before a durable
+        // dispatch receipt existed. Preserve them, but let a repeat Staff
+        // approval make one safe delivery attempt rather than claiming an
+        // alert was sent when it never ran.
+        notificationPending: !current.notificationDispatchedAt,
+      }
       : {
         ...current,
         status: 'new',
@@ -439,7 +447,7 @@ export async function handoffClosedTransactionToAccounting(
         tcCompletedBy: current.tcCompletedBy || actor,
         handedOffAt: now,
         handedOffBy: actor,
-        notificationSentAt: now,
+        notificationPending: true,
         assignedToUid: null,
         assignedToName: null,
         updatedAt: now,
@@ -473,6 +481,10 @@ export async function handoffClosedTransactionToAccounting(
       }
     }
 
-    return { accountingCloseout, newlyCreated: !alreadyOpen };
+    return {
+      accountingCloseout,
+      newlyCreated: !alreadyOpen,
+      notificationPending: Boolean(accountingCloseout.notificationPending),
+    };
   });
 }

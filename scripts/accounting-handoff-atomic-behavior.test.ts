@@ -99,7 +99,10 @@ test('closed Staff approval and Accounting handoff persist in one workflow trans
 
   assert.equal(result.newlyCreated, true);
   assert.equal(result.accountingCloseout.status, 'new');
+  assert.equal(result.notificationPending, true);
   assert.equal(documents.get('transactions/tx-001')?.accountingCloseout?.status, 'new');
+  assert.equal(documents.get('transactions/tx-001')?.accountingCloseout?.notificationPending, true);
+  assert.equal(documents.get('transactions/tx-001')?.accountingCloseout?.notificationSentAt, undefined);
   assert.equal(documents.get('transactions/tx-001')?.departmentalProcessing?.accounting?.status, 'new');
   assert.equal(documents.get('staffQueue/queue-001')?.status, 'approved');
   assert.equal(documents.get('staffQueue/queue-001')?.reviewedBy, actor.uid);

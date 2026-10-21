@@ -53,7 +53,10 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(route, /Required accounting fields are incomplete/);
   assert.match(staffQueue, /getDesignatedAccountingUids/);
   assert.match(staffQueue, /accounting_closeout_new/);
-  assert.match(staffQueue, /handoffResult\.newlyCreated/);
+  assert.match(staffQueue, /handoffResult\.notificationPending/);
+  assert.match(staffQueue, /await sendNotification\(adminDb, \{/);
+  assert.match(staffQueue, /notificationDispatchedAt/);
+  assert.doesNotMatch(staffQueue, /void \(async \(\) => \{\s*try \{\s*const accountingUids/);
 });
 
 test('a Closed save remains in Staff Queue until Staff approves it for Accounting', () => {
