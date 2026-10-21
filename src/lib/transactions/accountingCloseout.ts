@@ -13,18 +13,50 @@ export type AccountingActor = {
   email: string;
 };
 
+export type AccountingStaffApproval = {
+  queueItemRef: FirebaseFirestore.DocumentReference;
+  queueItemUpdates: Record<string, unknown>;
+  activityLog?: { action: string; detail: string; by: string } | null;
+};
+
+export type AccountingHandoffResult = {
+  accountingCloseout: Record<string, any>;
+  newlyCreated: boolean;
+};
+
 export const ACCOUNTING_CLOSEOUT_STATUSES = ['new', 'in_progress', 'needs_information', 'completed', 'archived'] as const;
+// Firestore queries are exact-match. The active workflow writes only canonical
+// values, but include every known legacy capitalization/separator variant below
+// so a valid historic handoff cannot disappear solely because it was saved in a
+// prior format. This is intentionally below Firestore's 30-value `in` limit.
 export const ACCOUNTING_CLOSEOUT_QUERY_STATUSES = [
   ...ACCOUNTING_CLOSEOUT_STATUSES,
   'New',
+  'NEW',
   'In Progress',
+  'in progress',
+  'IN PROGRESS',
+  'In_Progress',
+  'IN_PROGRESS',
+  'In-Progress',
+  'in-progress',
+  'IN-PROGRESS',
   'Needs Information',
+  'needs information',
+  'NEEDS INFORMATION',
+  'Needs_Information',
+  'NEEDS_INFORMATION',
+  'Needs-Information',
+  'needs-information',
+  'NEEDS-INFORMATION',
   'Completed',
+  'COMPLETED',
   'Archived',
+  'ARCHIVED',
 ] as const;
 
 export function normalizeAccountingCloseoutStatus(value: unknown) {
-  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   return ACCOUNTING_CLOSEOUT_STATUSES.includes(normalized as (typeof ACCOUNTING_CLOSEOUT_STATUSES)[number])
     ? normalized as (typeof ACCOUNTING_CLOSEOUT_STATUSES)[number]
     : null;
@@ -383,49 +415,64 @@ export async function handoffClosedTransactionToAccounting(
   db: Firestore,
   transactionId: string,
   actor: AccountingActor,
-) {
+  staffApproval?: AccountingStaffApproval,
+): Promise<AccountingHandoffResult> {
   const txRef = db.collection('transactions').doc(transactionId);
-  const txDoc = await txRef.get();
-  if (!txDoc.exists) throw new Error('Linked transaction was not found');
-  const transaction = txDoc.data() as Record<string, any>;
-  const current = (transaction.accountingCloseout || {}) as Record<string, any>;
-  if (hasOpenAccountingCloseout(current)) return current;
+  // The Staff approval must never say completed while the same closed file is
+  // absent from Accounting. Use one Firestore transaction for the canonical
+  // handoff, its audit record, and (when supplied) the Staff Queue release.
+  return db.runTransaction(async (firestoreTransaction) => {
+    const txDoc = await firestoreTransaction.get(txRef);
+    if (!txDoc.exists) throw new Error('Linked transaction was not found');
+    const transaction = txDoc.data() as Record<string, any>;
+    const current = (transaction.accountingCloseout || {}) as Record<string, any>;
+    const alreadyOpen = hasOpenAccountingCloseout(current);
+    const now = new Date().toISOString();
+    const accountingCloseout = alreadyOpen
+      ? current
+      : {
+        ...current,
+        status: 'new',
+        snapshot: buildAccountingSnapshot(transaction, transactionId),
+        fieldOverrides: current.fieldOverrides || {},
+        tcCompletedAt: current.tcCompletedAt || now,
+        tcCompletedBy: current.tcCompletedBy || actor,
+        handedOffAt: now,
+        handedOffBy: actor,
+        notificationSentAt: now,
+        assignedToUid: null,
+        assignedToName: null,
+        updatedAt: now,
+      };
 
-  const now = new Date().toISOString();
-  const snapshot = buildAccountingSnapshot(transaction, transactionId);
-  const accountingCloseout = {
-    ...current,
-    status: 'new',
-    snapshot,
-    fieldOverrides: current.fieldOverrides || {},
-    tcCompletedAt: current.tcCompletedAt || now,
-    tcCompletedBy: current.tcCompletedBy || actor,
-    handedOffAt: now,
-    handedOffBy: actor,
-    notificationSentAt: now,
-    assignedToUid: null,
-    assignedToName: null,
-    updatedAt: now,
-  };
-  // The Accounting state and its immutable audit event are a single workflow
-  // transition. Commit them together so a Staff approval can reliably verify
-  // that both the queue state and recovery trail exist before reporting success.
-  const batch = db.batch();
-  batch.set(txRef, {
-    departmentalProcessing: {
-      ...(transaction.departmentalProcessing || {}),
-      tcStaffCloseout: { status: 'completed', completedAt: accountingCloseout.tcCompletedAt, completedBy: accountingCloseout.tcCompletedBy },
-      accounting: { status: 'new', handedOffAt: now, handedOffBy: actor },
-    },
-    accountingCloseout,
-    updatedAt: now,
-  }, { merge: true });
-  batch.set(txRef.collection('processingHistory').doc(), {
-    action: 'Accounting handoff created',
-    detail: 'TC/Staff closeout completed and the closed transaction was sent to Accounting.',
-    actor,
-    timestamp: now,
+    if (!alreadyOpen) {
+      firestoreTransaction.set(txRef, {
+        departmentalProcessing: {
+          ...(transaction.departmentalProcessing || {}),
+          tcStaffCloseout: { status: 'completed', completedAt: accountingCloseout.tcCompletedAt, completedBy: accountingCloseout.tcCompletedBy },
+          accounting: { status: 'new', handedOffAt: now, handedOffBy: actor },
+        },
+        accountingCloseout,
+        updatedAt: now,
+      }, { merge: true });
+      firestoreTransaction.set(txRef.collection('processingHistory').doc(), {
+        action: 'Accounting handoff created',
+        detail: 'TC/Staff closeout completed and the closed transaction was sent to Accounting.',
+        actor,
+        timestamp: now,
+      });
+    }
+
+    if (staffApproval) {
+      firestoreTransaction.update(staffApproval.queueItemRef, staffApproval.queueItemUpdates);
+      if (staffApproval.activityLog) {
+        firestoreTransaction.set(staffApproval.queueItemRef.collection('activityLog').doc(), {
+          ...staffApproval.activityLog,
+          timestamp: now,
+        });
+      }
+    }
+
+    return { accountingCloseout, newlyCreated: !alreadyOpen };
   });
-  await batch.commit();
-  return accountingCloseout;
 }

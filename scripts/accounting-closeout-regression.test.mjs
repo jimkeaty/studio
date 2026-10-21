@@ -16,12 +16,13 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(closeout, /departmentalProcessing/);
   assert.match(closeout, /accountingCloseout/);
   assert.match(closeout, /processingHistory/);
-  assert.match(closeout, /const batch = db\.batch\(\)/);
-  assert.match(closeout, /await batch\.commit\(\)/);
+  assert.match(closeout, /db\.runTransaction/);
+  assert.match(closeout, /firestoreTransaction\.set\(txRef/);
+  assert.match(closeout, /firestoreTransaction\.update\(staffApproval\.queueItemRef/);
   assert.match(closeout, /TC\/Staff closeout completed and the closed transaction was sent to Accounting/);
   assert.match(staffQueue, /handoffClosedTransactionToAccounting/);
-  assert.match(staffQueue, /action === 'approve' && Boolean\(item\.transactionId\)/);
-  assert.match(staffQueue, /const shouldVerifyAccountingHandoff/);
+  assert.match(staffQueue, /action === 'approve' \|\| action === 'complete'/);
+  assert.match(staffQueue, /let shouldVerifyAccountingHandoff = false/);
   assert.match(staffQueue, /const queueRequestedClosedStatus/);
   assert.match(staffQueue, /Accounting handoff could not be verified/);
 });
@@ -52,16 +53,19 @@ test('accounting access and completion validation cannot silently bypass incompl
   assert.match(route, /Required accounting fields are incomplete/);
   assert.match(staffQueue, /getDesignatedAccountingUids/);
   assert.match(staffQueue, /accounting_closeout_new/);
-  assert.match(staffQueue, /const alreadyInAccounting/);
+  assert.match(staffQueue, /handoffResult\.newlyCreated/);
 });
 
 test('a Closed save remains in Staff Queue until Staff approves it for Accounting', () => {
   assert.doesNotMatch(adminTransactions, /handoffClosedTransactionToAccounting/);
   assert.doesNotMatch(tcQueue, /handoffClosedTransactionToAccounting/);
   assert.doesNotMatch(staffQueue, /closedCanonicalSaveNeedsAccountingHandoff/);
-  assert.match(staffQueue, /A Staff approval is the sole gate from a closed canonical transaction into/);
+  assert.match(staffQueue, /A Staff release is the sole gate from a closed canonical transaction into/);
   assert.match(staffQueue, /The Staff Queue item was not approved/);
-  assert.match(staffQueue, /verified handoff to Accounting/);
+  assert.match(staffQueue, /staffReleaseWasAtomicallyCommitted/);
+  assert.match(staffQueue, /queueRequestedClosedStatus && txDocForAccounting\.exists && canonicalStatus === 'closed'/);
+  assert.match(staffQueue, /closed-file Accounting handoff verified in the same workflow commit/);
+  assert.match(staffQueue, /accountingHandoff: \{ \.\.\.accountingHandoff, verified: true \}/);
   assert.match(staffQueue, /accountingHandoff: \{ \.\.\.accountingHandoff, verified: true \}/);
   assert.match(route, /TC\/Staff closeout has not handed this transaction to Accounting yet/);
 });

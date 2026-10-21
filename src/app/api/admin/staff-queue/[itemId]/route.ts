@@ -529,13 +529,14 @@ export async function PATCH(
       await batch.commit();
     }
 
-    // A Staff approval is the sole gate from a closed canonical transaction into
-    // Accounting. Create and verify that canonical handoff before marking the
-    // Staff Queue item approved. Otherwise a transient handoff failure could
-    // present a false completed approval while silently stranding the file.
+    // A Staff release is the sole gate from a closed canonical transaction into
+    // Accounting. Determine whether the current canonical record is Closed only
+    // after applying the Staff edits above; a Staff member can correctly close a
+    // file and release it in the same save-and-approval operation.
     let accountingHandoff: { status: string; newlyCreated: boolean } | null = null;
-    const shouldVerifyAccountingHandoff = action === 'approve' && Boolean(item.transactionId);
-    if (shouldVerifyAccountingHandoff) {
+    const isStaffReleaseAction = action === 'approve' || action === 'complete';
+    let shouldVerifyAccountingHandoff = false;
+    if (isStaffReleaseAction && item.transactionId) {
       const txRefForAccounting = adminDb.collection('transactions').doc(String(item.transactionId));
       const txDocForAccounting = await txRefForAccounting.get();
       const queueRequestedClosedStatus = String(item.newStatus || '').trim().toLowerCase() === 'closed';
@@ -548,29 +549,7 @@ export async function PATCH(
         return jsonError(409, 'This Staff Queue item is marked Closed, but its linked transaction is not currently Closed. Refresh the file, save the Closed status, then approve it for Accounting.');
       }
 
-      if (txDocForAccounting.exists && canonicalStatus === 'closed') {
-        const currentCloseout = (txDocForAccounting.data()?.accountingCloseout || {}) as Record<string, any>;
-        const alreadyInAccounting = hasOpenAccountingCloseout(currentCloseout);
-        try {
-          await handoffClosedTransactionToAccounting(adminDb, String(item.transactionId), {
-            uid: decoded.uid,
-            name: reviewerName,
-            email: reviewerEmail,
-          });
-          const verifiedHandoffSnap = await txRefForAccounting.get();
-          const verifiedHandoff = (verifiedHandoffSnap.data()?.accountingCloseout || {}) as Record<string, any>;
-          if (!verifiedHandoffSnap.exists || !hasOpenAccountingCloseout(verifiedHandoff)) {
-            return jsonError(500, 'Accounting handoff could not be verified. The Staff Queue item was not approved; retry after refreshing.');
-          }
-          accountingHandoff = {
-            status: String(verifiedHandoff.status),
-            newlyCreated: !alreadyInAccounting,
-          };
-        } catch (accountingError: any) {
-          console.error('[staff-queue PATCH] Accounting handoff failed before approval:', accountingError?.message);
-          return jsonError(500, 'Accounting handoff failed. The Staff Queue item was not approved; retry after refreshing.');
-        }
-      }
+      shouldVerifyAccountingHandoff = queueRequestedClosedStatus && txDocForAccounting.exists && canonicalStatus === 'closed';
     }
 
     // ── Build queue item updates ─────────────────────────────────────────────
@@ -588,14 +567,14 @@ export async function PATCH(
       itemUpdates.reviewedByName = reviewerName;
       logAction = 'In Progress';
       logDetail = `Marked in progress by ${reviewerEmail}`;
-    } else if (action === 'approve') {
+    } else if (action === 'approve' || (action === 'complete' && shouldVerifyAccountingHandoff)) {
       itemUpdates.status = 'approved';
       itemUpdates.reviewedBy = decoded.uid;
       itemUpdates.reviewedByName = reviewerName;
       itemUpdates.reviewedAt = now;
       logAction = 'Approved';
-      logDetail = accountingHandoff
-        ? `Approved by ${reviewerEmail}; verified handoff to Accounting (${accountingHandoff.status}).`
+      logDetail = shouldVerifyAccountingHandoff
+        ? `Approved by ${reviewerEmail}; closed-file Accounting handoff verified in the same workflow commit.`
         : `Approved by ${reviewerEmail}`;
     } else if (action === 'complete') {
       itemUpdates.status = 'completed';
@@ -656,11 +635,55 @@ export async function PATCH(
       itemUpdates.status = queueStatus;
     }
 
-    await itemRef.update(itemUpdates);
+    const entryToLog = activityEntry || (logAction ? { action: logAction, detail: logDetail } : null);
+
+    // The Accounting state, processing-history event, Staff Queue approval, and
+    // its activity entry commit together for a Closed file. A failed commit
+    // leaves the Staff item unapproved and avoids an invisible partial handoff.
+    let staffReleaseWasAtomicallyCommitted = false;
+    if (shouldVerifyAccountingHandoff && item.transactionId) {
+      try {
+        const handoffResult = await handoffClosedTransactionToAccounting(adminDb, String(item.transactionId), {
+          uid: decoded.uid,
+          name: reviewerName,
+          email: reviewerEmail,
+        }, {
+          queueItemRef: itemRef,
+          queueItemUpdates: itemUpdates,
+          activityLog: entryToLog
+            ? { action: entryToLog.action, detail: entryToLog.detail || '', by: reviewerEmail }
+            : null,
+        });
+        const [verifiedHandoffSnap, verifiedQueueSnap] = await Promise.all([
+          adminDb.collection('transactions').doc(String(item.transactionId)).get(),
+          itemRef.get(),
+        ]);
+        const verifiedHandoff = (verifiedHandoffSnap.data()?.accountingCloseout || {}) as Record<string, any>;
+        if (
+          !verifiedHandoffSnap.exists ||
+          !hasOpenAccountingCloseout(verifiedHandoff) ||
+          !verifiedQueueSnap.exists ||
+          String(verifiedQueueSnap.data()?.status || '').trim().toLowerCase() !== 'approved'
+        ) {
+          return jsonError(500, 'Accounting handoff could not be verified. The Staff Queue item was not approved; retry after refreshing.');
+        }
+        accountingHandoff = {
+          status: String(handoffResult.accountingCloseout.status),
+          newlyCreated: handoffResult.newlyCreated,
+        };
+        staffReleaseWasAtomicallyCommitted = true;
+      } catch (accountingError: any) {
+        console.error('[staff-queue PATCH] Atomic Accounting handoff failed before approval:', accountingError?.message);
+        return jsonError(500, 'Accounting handoff failed. The Staff Queue item was not approved; retry after refreshing.');
+      }
+    }
+
+    if (!staffReleaseWasAtomicallyCommitted) {
+      await itemRef.update(itemUpdates);
+    }
 
     // ── Write activity log entry ─────────────────────────────────────────────
-    const entryToLog = activityEntry || (logAction ? { action: logAction, detail: logDetail } : null);
-    if (entryToLog) {
+    if (entryToLog && !staffReleaseWasAtomicallyCommitted) {
       await itemRef.collection('activityLog').add({
         action: entryToLog.action,
         detail: entryToLog.detail || '',

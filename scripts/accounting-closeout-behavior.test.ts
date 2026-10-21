@@ -1,10 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildAccountingSnapshot, requiredAccountingFieldsMissing } from '../src/lib/transactions/accountingCloseout';
+import {
+  ACCOUNTING_CLOSEOUT_QUERY_STATUSES,
+  buildAccountingSnapshot,
+  normalizeAccountingCloseoutStatus,
+  requiredAccountingFieldsMissing,
+} from '../src/lib/transactions/accountingCloseout';
 
 function fieldMap(transaction: Record<string, any>) {
   return new Map(buildAccountingSnapshot(transaction, 'accounting-test-001').fields.map((field) => [field.id, field]));
 }
+
+test('Accounting status normalization and Firestore query variants preserve valid legacy handoffs', () => {
+  for (const [raw, canonical] of [
+    ['in progress', 'in_progress'],
+    ['IN_PROGRESS', 'in_progress'],
+    ['In-Progress', 'in_progress'],
+    ['needs-information', 'needs_information'],
+    ['NEEDS_INFORMATION', 'needs_information'],
+    [' COMPLETED ', 'completed'],
+  ]) {
+    assert.equal(normalizeAccountingCloseoutStatus(raw), canonical);
+  }
+  for (const historicValue of ['in progress', 'IN_PROGRESS', 'In-Progress', 'needs-information', 'NEEDS_INFORMATION'] as const) {
+    assert.ok(ACCOUNTING_CLOSEOUT_QUERY_STATUSES.includes(historicValue), `${historicValue} must remain queryable`);
+  }
+});
 
 test('Accounting Closeout derives the requested review values from the canonical transaction and split snapshot', () => {
   const fields = fieldMap({
