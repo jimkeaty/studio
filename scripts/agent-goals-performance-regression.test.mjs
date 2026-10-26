@@ -6,10 +6,13 @@ const rosterPath = new URL('../src/app/api/broker/agent-roster-metrics/route.ts'
 const planRoutePath = new URL('../src/app/api/plan/route.ts', import.meta.url);
 const recruitingPagePath = new URL('../src/app/dashboard/admin/recruiting/page.tsx', import.meta.url);
 
-test('agent roster uses the canonical per-profile business-plan document path and preserves legacy identifiers as fallbacks', async () => {
+test('agent roster reads the canonical per-profile business-plan document path directly and preserves legacy identifiers as fallbacks', async () => {
   const [roster, planRoute] = await Promise.all([readFile(rosterPath, 'utf8'), readFile(planRoutePath, 'utf8')]);
   assert.match(planRoute, /dashboards\/\{year\}\/agent\/\{profileDocId\}\/plans\/plan/);
+  assert.match(roster, /agents\.map\(async agent =>/);
+  assert.match(roster, /\.doc\(String\(agent\.id\)\)\s*\.collection\('plans'\)\s*\.doc\('plan'\)/);
   assert.match(roster, /planByAgent\.get\(agent\.id\) \|\| planByAgent\.get\(uid\)/);
+  assert.match(roster, /if \(agent\.firebaseUid\) planByAgent\.set/);
   assert.match(roster, /if \(planData\.userId\) planByAgent\.set/);
   assert.match(roster, /if \(planData\.agentId\) planByAgent\.set/);
 });

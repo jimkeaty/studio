@@ -282,31 +282,36 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 5. Batch-fetch all business plans for the year ────────────────────
-    const plansSnap = await adminDb.collection('dashboards')
-      .doc(String(yearNum))
-      .collection('agent')
-      .get();
-
-    // For each agent doc, get the plans/plan sub-doc
+    // ── 5. Batch-fetch each active profile's canonical business plan ───────
+    // Firestore allows a subcollection document to exist without its parent
+    // document. Listing dashboards/{year}/agent therefore misses valid plans
+    // when only plans/plan exists. Read the known canonical path for every
+    // active profile instead, matching GET /api/plan exactly.
     const planByAgent = new Map<string, any>();
-    const planPromises: Promise<void>[] = [];
-    for (const agentDoc of plansSnap.docs) {
-      planPromises.push(
-        agentDoc.ref.collection('plans').doc('plan').get().then(planDoc => {
-          if (planDoc.exists) {
-            const planData = planDoc.data() || {};
-            // The canonical API saves plans beneath the agent-profile document
-            // ID. Preserve compatibility with older plan payloads that stored
-            // a userId or agentId in the document body as well.
-            planByAgent.set(agentDoc.id, planData);
-            if (planData.userId) planByAgent.set(String(planData.userId), planData);
-            if (planData.agentId) planByAgent.set(String(planData.agentId), planData);
-          }
-        })
-      );
+    const planResults = await Promise.all(agents.map(async agent => {
+      const planDoc = await adminDb.collection('dashboards')
+        .doc(String(yearNum))
+        .collection('agent')
+        .doc(String(agent.id))
+        .collection('plans')
+        .doc('plan')
+        .get();
+      return { agent, planDoc };
+    }));
+
+    for (const { agent, planDoc } of planResults) {
+      if (!planDoc.exists) continue;
+      const planData = planDoc.data() || {};
+
+      // The profile document ID is canonical. Map all known aliases as
+      // read-only fallbacks because historical activity and transactions may
+      // still use an agent slug or Firebase UID.
+      planByAgent.set(String(agent.id), planData);
+      if (agent.agentId) planByAgent.set(String(agent.agentId), planData);
+      if (agent.firebaseUid) planByAgent.set(String(agent.firebaseUid), planData);
+      if (planData.userId) planByAgent.set(String(planData.userId), planData);
+      if (planData.agentId) planByAgent.set(String(planData.agentId), planData);
     }
-    await Promise.all(planPromises);
 
     // ── 6. Batch-fetch agent goals from brokerCommandGoals ────────────────
     const goalsSnap = await adminDb.collection('brokerCommandGoals')
