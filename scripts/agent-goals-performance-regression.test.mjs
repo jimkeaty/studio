@@ -16,7 +16,8 @@ test('agent roster uses the canonical per-profile business-plan document path an
 
 test('missing goals are represented as N/A and never promoted to an A grade', async () => {
   const roster = await readFile(rosterPath, 'utf8');
-  assert.match(roster, /function configuredNumber\(value: unknown\): number \| null/);
+  assert.match(roster, /resolveAnnualIncomeGoal\(plan\)/);
+  assert.match(roster, /resolveYtdActivityGoal\(/);
   assert.match(roster, /if \(target === null\) return null/);
   assert.match(roster, /if \(perf === null\) return 'N\/A'/);
   assert.match(roster, /engagementsGrade: engPerf === null \? 'N\/A'/);
@@ -32,10 +33,30 @@ test('an explicitly saved numeric zero remains configured and distinct from Goal
   assert.match(roster, /incomeGoalConfigured: expectedYTDIncome !== null/);
 });
 
+test('the roster supports canonical and legacy income fields and derives activity targets from yearly plan targets', async () => {
+  const roster = await readFile(rosterPath, 'utf8');
+  assert.match(roster, /resolveAnnualIncomeGoal\(plan\)/);
+  assert.match(roster, /resolveYtdActivityGoal\(/);
+  assert.match(roster, /plan\.calculatedTargets\?\.engagements/);
+  assert.match(roster, /plan\.calculatedTargets\?\.calls/);
+  assert.match(roster, /plan\.calculatedTargets\?\.appointmentsHeld/);
+});
+
 test('Recruiting roster displays Goal Not Set and an N/A grade instead of losing missing-goal context', async () => {
   const page = await readFile(recruitingPagePath, 'utf8');
   assert.match(page, /'N\/A': 'bg-slate-100/);
   assert.match(page, /Goal Not Set/);
   assert.match(page, /\['A', 'B', 'C', 'D', 'F', 'N\/A'\]/);
   assert.match(page, /N\/A \{summary\.gradeDistribution\['N\/A'\]/);
+});
+
+test('Recruiting opens on individual agent goals and exposes income targets in table and cards', async () => {
+  const page = await readFile(recruitingPagePath, 'utf8');
+  assert.match(page, /Tabs defaultValue="roster"/);
+  assert.match(page, /Agent Goals &amp; Performance/);
+  assert.match(page, /Individual business-plan goals/);
+  assert.match(page, /Net Income \(YTD\)/);
+  assert.match(page, /Income \+ Pipeline/);
+  assert.match(page, /Annual Income Goal/);
+  assert.match(page, /incomePipelineGoal/);
 });

@@ -834,6 +834,14 @@ function AgentPerformanceRoster({ year }: { year: number }) {
 
   return (
     <div className="space-y-4">
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>Individual business-plan goals</AlertTitle>
+        <AlertDescription>
+          Income and activity goals below come from each agent&apos;s saved Business Plan. Each goal is prorated through the selected date; &ldquo;Goal Not Set&rdquo; means that specific plan target has not been saved.
+        </AlertDescription>
+      </Alert>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Card className="border-2">
@@ -1228,10 +1236,10 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     </TableHead>
                     <TableHead className="text-center">Calls</TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('incomeGrade')}>
-                      <div className="flex items-center justify-center gap-1">Income <SortIcon field="incomeGrade" /></div>
+                      <div className="flex items-center justify-center gap-1">Net Income (YTD) <SortIcon field="incomeGrade" /></div>
                     </TableHead>
                     <TableHead className="text-center cursor-pointer" onClick={() => toggleSort('pipelineGrade')}>
-                      <div className="flex items-center justify-center gap-1">w/ Pipeline <SortIcon field="pipelineGrade" /></div>
+                      <div className="flex items-center justify-center gap-1">Income + Pipeline <SortIcon field="pipelineGrade" /></div>
                     </TableHead>
                     <TableHead className="text-center">Deals</TableHead>
                     <TableHead className="text-right">Volume</TableHead>
@@ -1305,8 +1313,9 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                       <TableCell className="text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <GradeBadge grade={a.incomePipelineGrade} />
-                          <span className="text-xs">{fmtCurrency(a.incomePipelineActual)}</span>
-                          <span className="text-[10px] text-muted-foreground">{a.incomeGoalConfigured ? `${a.incomePipelinePerf}%` : 'Goal Not Set'}</span>
+                          <span className="text-xs">{fmtCurrency(a.incomePipelineActual)} / {a.incomeGoalConfigured ? fmtCurrency(a.incomePipelineGoal ?? 0) : 'Goal Not Set'}</span>
+                          <span className="text-[10px] text-muted-foreground">{a.incomeGoalConfigured ? `${a.incomePipelinePerf}% of YTD goal` : 'Goal Not Set'}</span>
+                          <Delta value={a.incomeGoalConfigured ? a.incomePipelineActual - (a.incomePipelineGoal ?? 0) : null} isCurrency />
                         </div>
                       </TableCell>
 
@@ -1445,12 +1454,14 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                   <div className="text-center">
                     <p className="text-[10px] text-muted-foreground mb-1">Income</p>
                     <GradeBadge grade={a.incomeGrade} size="lg" />
-                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomeActual)}</p>
+                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomeActual)} / {a.incomeGoalConfigured ? fmtCurrency(a.incomeGoal ?? 0) : 'Goal Not Set'}</p>
+                    <Delta value={a.incomeDelta} isCurrency />
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-muted-foreground mb-1">w/ Pipeline</p>
                     <GradeBadge grade={a.incomePipelineGrade} size="lg" />
-                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomePipelineActual)}</p>
+                    <p className="text-[10px] mt-0.5">{fmtCurrency(a.incomePipelineActual)} / {a.incomeGoalConfigured ? fmtCurrency(a.incomePipelineGoal ?? 0) : 'Goal Not Set'}</p>
+                    <Delta value={a.incomeGoalConfigured ? a.incomePipelineActual - (a.incomePipelineGoal ?? 0) : null} isCurrency />
                   </div>
                 </div>
 
@@ -1465,7 +1476,7 @@ function AgentPerformanceRoster({ year }: { year: number }) {
                     <p className="font-medium">{fmtCurrency(a.closedVolume)}</p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Goal</span>
+                    <span className="text-muted-foreground">Annual Income Goal</span>
                     <p className="font-medium">{a.annualIncomeGoal > 0 ? fmtCurrency(a.annualIncomeGoal) : 'Not set'}</p>
                   </div>
                 </div>
@@ -1757,15 +1768,15 @@ export default function RecruitingDashboardPage() {
         </a>
       </div>
 
-      <Tabs defaultValue="admin-report-cards" className="w-full">
+      <Tabs defaultValue="roster" className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+          <TabsTrigger value="roster">Agent Goals &amp; Performance</TabsTrigger>
           <TabsTrigger value="admin-report-cards">Admin Report Cards</TabsTrigger>
           <TabsTrigger value="operations">Staff List View</TabsTrigger>
-          <TabsTrigger value="roster">Agent Performance Roster</TabsTrigger>
           <TabsTrigger value="incentive">Incentive Program Config</TabsTrigger>
         </TabsList>
 
-        {/* ── TAB 1: Agent Performance Roster ─────────────────────────────── */}
+        {/* ── TAB 1: Agent Goals & Performance ───────────────────────────── */}
         <TabsContent value="roster" className="space-y-6 mt-6">
           <AgentPerformanceRoster year={year} />
           <OneOnOneScheduler agents={[]} />

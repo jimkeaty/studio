@@ -5,6 +5,10 @@ import { adminAuth, adminDb } from '@/lib/firebase/admin';
 import { isAdminLike } from '@/lib/auth/staffAccess';
 import { getAgentProductionCredit } from '@/lib/transactions/resolveProductionCredit';
 import { classifyAgentLifecycle } from '@/lib/agents/lifecycle';
+import {
+  resolveAnnualIncomeGoal,
+  resolveYtdActivityGoal,
+} from '@/lib/agents/planGoalResolution';
 
 
 function getBearerToken(req: NextRequest) {
@@ -42,12 +46,6 @@ function gradeFromPerformance(perf: number | null): 'A' | 'B' | 'C' | 'D' | 'F' 
   if (perf >= 70) return 'C';
   if (perf >= 60) return 'D';
   return 'F';
-}
-
-function configuredNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
 }
 
 function perf(actual: number, target: number | null): number | null {
@@ -384,16 +382,27 @@ export async function GET(req: NextRequest) {
         ? 0
         : countWeekdaysInclusive(kpiEffectiveStart, asOf);
 
-      // Engagement & appointment targets use KPI clock
-      const dailyEngTarget = configuredNumber(plan.calculatedTargets?.engagements?.daily);
-      const dailyCallsTarget = configuredNumber(plan.calculatedTargets?.calls?.daily);
-      const dailyApptHeldTarget = configuredNumber(plan.calculatedTargets?.appointmentsHeld?.daily);
-      const engTarget = dailyEngTarget === null ? null : Number((dailyEngTarget * kpiElapsed).toFixed(2));
-      const callsTarget = dailyCallsTarget === null ? null : Number((dailyCallsTarget * kpiElapsed).toFixed(2));
-      const apptHeldTarget = dailyApptHeldTarget === null ? null : Number((dailyApptHeldTarget * kpiElapsed).toFixed(2));
+      // KPI targets use the KPI clock. Prefer each plan's stable yearly target,
+      // matching the agent dashboard and avoiding old missing/daily-zero fields.
+      // Older plans that only stored a daily target remain readable.
+      const engTarget = resolveYtdActivityGoal(
+        plan.calculatedTargets?.engagements,
+        kpiElapsed,
+        totalWorkdaysInRolling12,
+      );
+      const callsTarget = resolveYtdActivityGoal(
+        plan.calculatedTargets?.calls,
+        kpiElapsed,
+        totalWorkdaysInRolling12,
+      );
+      const apptHeldTarget = resolveYtdActivityGoal(
+        plan.calculatedTargets?.appointmentsHeld,
+        kpiElapsed,
+        totalWorkdaysInRolling12,
+      );
 
       // Income goals use financial clock
-      const annualIncomeGoal = configuredNumber(plan.annualIncomeGoal);
+      const annualIncomeGoal = resolveAnnualIncomeGoal(plan);
       const expectedYTDIncome = annualIncomeGoal === null ? null : totalWorkdaysInRolling12 > 0
         ? Number(((annualIncomeGoal * financialElapsed) / totalWorkdaysInRolling12).toFixed(2))
         : null;

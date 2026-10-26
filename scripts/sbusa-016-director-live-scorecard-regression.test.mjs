@@ -21,7 +21,10 @@ test('SBUSA-016 excludes effective Inactive and Out profiles using the shared li
 });
 
 test('SBUSA-016 reuses agent plan targets for calls, engagements, and appointments-held YTD goals', () => {
-  assert.match(route, /dailyCallsTarget = configuredNumber\(plan\.calculatedTargets\?\.calls\?\.daily\)/);
+  assert.match(route, /resolveYtdActivityGoal\(/);
+  assert.match(route, /plan\.calculatedTargets\?\.calls/);
+  assert.match(route, /plan\.calculatedTargets\?\.engagements/);
+  assert.match(route, /plan\.calculatedTargets\?\.appointmentsHeld/);
   assert.match(route, /callsGoal: callsTarget/);
   assert.match(route, /callsDelta: callsTarget/);
   assert.match(page, /\{a\.callsActual\} \/ \{a\.callsGoalConfigured/);
