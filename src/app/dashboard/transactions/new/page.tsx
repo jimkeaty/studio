@@ -4128,7 +4128,15 @@ export default function AddTransactionPage() {
                     const res = await fetch(apiPath, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({ action: 'approve' }),
+                      // Staff has a separate, intentional release step to
+                      // Accounting. Send that intent explicitly rather than
+                      // asking the server to infer it from historic queue
+                      // metadata, which can be stale after Staff changes the
+                      // transaction to Closed in this same review.
+                      body: JSON.stringify({
+                        action: 'approve',
+                        releaseToAccounting: queueRole === 'staff' && watchedStatus === 'closed',
+                      }),
                     });
                     const data = await res.json();
                     if (!res.ok || !data.ok) throw new Error(data.error || 'Approval failed');

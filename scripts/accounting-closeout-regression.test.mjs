@@ -11,6 +11,8 @@ const tcQueue = read('src/app/api/admin/tc/[id]/route.ts');
 const adminTransactions = read('src/app/api/admin/transactions/route.ts');
 const access = read('src/lib/auth/staffAccess.ts');
 const panel = read('src/components/dashboard/broker/AccountingCloseoutQueue.tsx');
+const staffRelease = read('src/lib/transactions/staffAccountingRelease.ts');
+const editor = read('src/app/dashboard/transactions/new/page.tsx');
 
 test('accounting closeout is a departmental workflow on the canonical transaction', () => {
   assert.match(closeout, /departmentalProcessing/);
@@ -23,7 +25,8 @@ test('accounting closeout is a departmental workflow on the canonical transactio
   assert.match(staffQueue, /handoffClosedTransactionToAccounting/);
   assert.match(staffQueue, /action === 'approve' \|\| action === 'complete'/);
   assert.match(staffQueue, /let shouldVerifyAccountingHandoff = false/);
-  assert.match(staffQueue, /const queueRequestedClosedStatus/);
+  assert.match(staffQueue, /requestedAccountingRelease/);
+  assert.match(staffQueue, /shouldReleaseToAccounting/);
   assert.match(staffQueue, /Accounting handoff could not be verified/);
 });
 
@@ -66,7 +69,9 @@ test('a Closed save remains in Staff Queue until Staff approves it for Accountin
   assert.match(staffQueue, /A Staff release is the sole gate from a closed canonical transaction into/);
   assert.match(staffQueue, /The Staff Queue item was not approved/);
   assert.match(staffQueue, /staffReleaseWasAtomicallyCommitted/);
-  assert.match(staffQueue, /queueRequestedClosedStatus && txDocForAccounting\.exists && canonicalStatus === 'closed'/);
+  assert.match(staffRelease, /releaseToAccounting === true/);
+  assert.match(staffRelease, /canonicalStatus\) !== 'closed'/);
+  assert.match(editor, /releaseToAccounting: queueRole === 'staff' && watchedStatus === 'closed'/);
   assert.match(staffQueue, /closed-file Accounting handoff verified in the same workflow commit/);
   assert.match(staffQueue, /accountingHandoff: \{ \.\.\.accountingHandoff, verified: true \}/);
   assert.match(staffQueue, /accountingHandoff: \{ \.\.\.accountingHandoff, verified: true \}/);

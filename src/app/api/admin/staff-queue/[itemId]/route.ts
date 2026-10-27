@@ -27,6 +27,10 @@ import { enforcePassThroughFinancialPolicy } from '@/lib/transactions/passThroug
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
+import {
+  requestedAccountingRelease,
+  shouldReleaseToAccounting,
+} from '@/lib/transactions/staffAccountingRelease';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -291,6 +295,7 @@ export async function PATCH(
       dismissReason,
       archiveReason,
       activityEntry,
+      releaseToAccounting,
     } = body;
 
     const itemRef = adminDb.collection('staffQueue').doc(itemId);
@@ -539,17 +544,26 @@ export async function PATCH(
     if (isStaffReleaseAction && item.transactionId) {
       const txRefForAccounting = adminDb.collection('transactions').doc(String(item.transactionId));
       const txDocForAccounting = await txRefForAccounting.get();
-      const queueRequestedClosedStatus = String(item.newStatus || '').trim().toLowerCase() === 'closed';
       const canonicalStatus = String(txDocForAccounting.data()?.status || '').trim().toLowerCase();
+      const accountingReleaseRequested = requestedAccountingRelease({
+        releaseToAccounting,
+        queueItem: item,
+      });
 
-      // A normal listing/status approval does not belong in Accounting. A Staff
-      // Queue item specifically submitted as Closed must, however, still point
-      // to a canonical Closed record; do not give a false approval if it does not.
-      if (queueRequestedClosedStatus && (!txDocForAccounting.exists || canonicalStatus !== 'closed')) {
-        return jsonError(409, 'This Staff Queue item is marked Closed, but its linked transaction is not currently Closed. Refresh the file, save the Closed status, then approve it for Accounting.');
+      // An explicit UI release or an existing closed-review wrapper must still
+      // point to a canonical Closed transaction. This avoids both false
+      // Accounting handoffs and the historic stale-wrapper failure where Staff
+      // closes an older item and then approves it in the same workflow.
+      if (accountingReleaseRequested && (!txDocForAccounting.exists || canonicalStatus !== 'closed')) {
+        return jsonError(409, 'This file cannot be sent to Accounting because its linked transaction is not currently Closed. Refresh the file, save the Closed status, then approve it for Accounting.');
       }
 
-      shouldVerifyAccountingHandoff = queueRequestedClosedStatus && txDocForAccounting.exists && canonicalStatus === 'closed';
+      shouldVerifyAccountingHandoff = shouldReleaseToAccounting({
+        action,
+        releaseToAccounting,
+        canonicalStatus,
+        queueItem: item,
+      });
     }
 
     // ── Build queue item updates ─────────────────────────────────────────────

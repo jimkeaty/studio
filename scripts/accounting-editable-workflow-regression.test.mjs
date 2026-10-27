@@ -38,3 +38,9 @@ test('new closeouts notify one configurable designated Accounting recipient whil
   assert.match(staffUsers, /receivesAccountingCloseoutNotifications/);
   assert.match(staffUsersPage, /Designated Accounting recipient/);
 });
+
+test('the visible Staff closed-file approval button explicitly requests Accounting release', () => {
+  assert.match(editor, /Approve & Send to Accounting/);
+  assert.match(editor, /releaseToAccounting: queueRole === 'staff' && watchedStatus === 'closed'/);
+  assert.match(staffQueue, /shouldReleaseToAccounting/);
+});
