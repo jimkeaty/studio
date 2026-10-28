@@ -671,11 +671,30 @@ type FormValues = z.infer<typeof schema>;
 // ─────────────────────────────────────────────────────────────────────────────
 // Layout helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function Section({ title, description, children }: {
-  title: string; description?: string; children: React.ReactNode;
+const TRANSACTION_SECTION_IDS: Record<string, string> = {
+  'Property / Transaction Details': 'transaction-details',
+  'Key Dates': 'key-dates',
+  'Buyer / Seller Information': 'parties',
+  'Cooperating Agent': 'cooperating-agent',
+  'Mortgage / Lender': 'mortgage-lender',
+  'Title Company': 'title-company',
+  'Financial Details': 'financial-details',
+  'Pre-Listing Inspections': 'inspections',
+  'Buyer Inspections': 'inspections',
+  'Inspections': 'inspections',
+  'Outbound Referral Details': 'referral-details',
+  'Referral Key Dates': 'key-dates',
+  'Additional Info': 'additional-info',
+  'Buyer Closing Cost Paid by Seller': 'commission-fees',
+  'Additional Information': 'additional-information',
+};
+
+function Section({ title, description, sectionId, children }: {
+  title: string; description?: string; sectionId?: string; children: React.ReactNode;
 }) {
+  const resolvedSectionId = sectionId || TRANSACTION_SECTION_IDS[title];
   return (
-    <Card>
+    <Card id={resolvedSectionId ? `transaction-section-${resolvedSectionId}` : undefined} tabIndex={resolvedSectionId ? -1 : undefined}>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
@@ -710,6 +729,10 @@ export default function AddTransactionPage() {
   const queueRole = urlSearchParams?.get('role') ?? null; // 'tc' | 'staff' | null
   const isTcQueueMode = Boolean(intakeId && (queueRole === 'tc' || queueRole === 'staff'));
   const isAccountingCloseoutMode = editMode && urlSearchParams?.get('accountingCloseout') === '1';
+  const notificationFocus = String(urlSearchParams?.get('focus') || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
   const [submitted, setSubmitted] = useState(false);
   const [resultId, setResultId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -2891,6 +2914,30 @@ export default function AddTransactionPage() {
     };
     loadTx();
   }, [editTxId, user, editLoaded]);
+
+  // Detailed notifications link to a saved transaction and a relevant section.
+  // Expand collapsible panels before scrolling so the recipient reaches the
+  // actual change rather than a closed card header.
+  useEffect(() => {
+    if (!notificationFocus || !editLoaded || pdfStep !== 'form') return;
+
+    if (notificationFocus === 'media-order') setMediaOrderOpen(true);
+    if (notificationFocus === 'mls') setMlsDescriptionOpen(true);
+    if (notificationFocus === 'sign-order') setSignOrderOpen(true);
+    if (notificationFocus === 'showingtime') setShowingTimeOpen(true);
+
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(`transaction-section-${notificationFocus}`)
+        || document.getElementById('transaction-section-transaction-details');
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.focus({ preventScroll: true });
+      target.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+      window.setTimeout(() => target.classList.remove('ring-2', 'ring-primary', 'ring-offset-2'), 2200);
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [notificationFocus, editLoaded, pdfStep]);
 
   // ── Load intake status when in TC/staff queue mode ────────────────────────
   useEffect(() => {
@@ -5991,7 +6038,7 @@ export default function AddTransactionPage() {
           {/* ── Media Order (listing/dual only, collapsed by default) ─────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={mediaOrderOpen} onOpenChange={setMediaOrderOpen}>
-              <Card>
+              <Card id="transaction-section-media-order" tabIndex={-1}>
                 <CardHeader
                   className="cursor-pointer select-none py-4"
                   onClick={() => setMediaOrderOpen(!mediaOrderOpen)}
@@ -6053,7 +6100,7 @@ export default function AddTransactionPage() {
           {/* ── MLS Description Builder (listing/dual only, collapsed by default) ─── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={mlsDescriptionOpen} onOpenChange={setMlsDescriptionOpen}>
-              <Card>
+              <Card id="transaction-section-mls" tabIndex={-1}>
                 <CardHeader
                   className="cursor-pointer select-none py-4"
                   onClick={() => setMlsDescriptionOpen(!mlsDescriptionOpen)}
@@ -6210,7 +6257,7 @@ export default function AddTransactionPage() {
           {/* ── Sign Order (listing/dual only, collapsed by default) ───────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={signOrderOpen} onOpenChange={setSignOrderOpen}>
-              <Card>
+              <Card id="transaction-section-sign-order" tabIndex={-1}>
                 <CardHeader
                   className="cursor-pointer select-none py-4"
                   onClick={() => setSignOrderOpen(!signOrderOpen)}
@@ -6580,7 +6627,7 @@ export default function AddTransactionPage() {
           {/* ── ShowingTime Setup (listing/dual only) ──────────────────────── */}
           {(watchedClosingType === 'listing' || watchedClosingType === 'dual') && (
             <Collapsible open={showingTimeOpen} onOpenChange={setShowingTimeOpen}>
-              <Card>
+              <Card id="transaction-section-showingtime" tabIndex={-1}>
                 <CardHeader
                   className="cursor-pointer select-none py-4"
                   onClick={() => setShowingTimeOpen(!showingTimeOpen)}
@@ -8397,7 +8444,7 @@ export default function AddTransactionPage() {
           </Section>
 
           {/* ── Documents ────────────────────────────────────────────────────────────────── */}
-          <Card>
+          <Card id="transaction-section-documents" tabIndex={-1}>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Paperclip className="h-4 w-4" />

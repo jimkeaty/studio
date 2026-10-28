@@ -28,6 +28,11 @@ import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 import {
+  buildTransactionChangeSummary,
+  transactionChangeUrl,
+  type TransactionChangeSummary,
+} from '@/lib/transactions/changeSummary';
+import {
   requestedAccountingRelease,
   shouldReleaseToAccounting,
 } from '@/lib/transactions/staffAccountingRelease';
@@ -312,6 +317,7 @@ export async function PATCH(
 
     // ── Apply transaction field updates ─────────────────────────────────────
     let persistedTransaction: Record<string, any> | null = null;
+    let transactionChangeSummary: TransactionChangeSummary | null = null;
     if (txUpdates && item.transactionId) {
       const txRef = adminDb.collection('transactions').doc(item.transactionId);
 
@@ -476,6 +482,11 @@ export async function PATCH(
           ...serializeFirestore(persistedTransactionSnap.data() || {}),
         };
         persistedTransaction = verifiedTransaction;
+        transactionChangeSummary = buildTransactionChangeSummary(
+          currentTx,
+          verifiedTransaction,
+          Object.keys(txUpdates),
+        );
 
         // Rebuild agent rollup so leaderboard and tier progression stay in sync
         try {
@@ -710,6 +721,12 @@ export async function PATCH(
     // ── Notify agent of staff actions ───────────────────────────────────────
     const agentIdSlug = String(item.agentId || '').trim();
     const agentUid = agentIdSlug ? await getAgentUid(adminDb, agentIdSlug) : null;
+    const detailSuffix = transactionChangeSummary?.hasChanges
+      ? `\n\n${transactionChangeSummary.body}`
+      : '';
+    const transactionDetailUrl = item.transactionId && transactionChangeSummary?.hasChanges
+      ? transactionChangeUrl(String(item.transactionId), transactionChangeSummary.section)
+      : '/dashboard/transactions';
     if (agentUid) {
       const txAddress = String(item.address || item.transactionAddress || 'your transaction');
       let notifTitle: string | null = null;
@@ -717,10 +734,10 @@ export async function PATCH(
 
       if (action === 'approve') {
         notifTitle = 'Transaction Approved ✅';
-        notifBody = `${reviewerName} has approved your transaction at ${txAddress}. Everything looks good!`;
+        notifBody = `${reviewerName} has approved your transaction at ${txAddress}. Everything looks good!${detailSuffix}`;
       } else if (action === 'complete') {
         notifTitle = 'Staff Review Complete ✅';
-        notifBody = `Staff has completed the review for ${txAddress}. Check your transaction for any updates.`;
+        notifBody = `Staff has completed the review for ${txAddress}. Check your transaction for any updates.${detailSuffix}`;
       } else if (action === 'dismiss') {
         notifTitle = 'Staff Queue Item Dismissed';
         notifBody = `The staff queue item for ${txAddress} was dismissed by ${reviewerName}.`;
@@ -728,8 +745,10 @@ export async function PATCH(
         notifTitle = 'Staff Started Reviewing Your Listing';
         notifBody = `${reviewerName} has started reviewing ${txAddress}.`;
       } else if (action === 'save' || txUpdates) {
-        notifTitle = 'Staff Updated Your Transaction';
-        notifBody = `${reviewerName} made updates to ${txAddress}.`;
+        notifTitle = transactionChangeSummary?.hasChanges
+          ? `Staff Updated Your Transaction — ${transactionChangeSummary.sectionLabel}`
+          : 'Staff Updated Your Transaction';
+        notifBody = `${reviewerName} made updates to ${txAddress}.${detailSuffix}`;
       } else if (checklist && Array.isArray(checklist) && checklist.some((c: any) => c.completed)) {
         notifTitle = 'Staff Checklist Updated';
         notifBody = `${reviewerName} completed a checklist task for ${txAddress}.`;
@@ -740,11 +759,14 @@ export async function PATCH(
 
       if (notifTitle && notifBody) {
         void sendNotification(adminDb, {
-          type: 'staff_queue_resolved',
+          type: transactionChangeSummary?.hasChanges ? 'transaction_change_details' : 'staff_queue_resolved',
           recipientUids: [agentUid],
           title: notifTitle,
           body: notifBody,
-          url: '/dashboard/transactions',
+          url: transactionDetailUrl,
+          data: transactionChangeSummary?.hasChanges
+            ? { transactionId: item.transactionId, changedFields: transactionChangeSummary.changedFields.join(','), section: transactionChangeSummary.section }
+            : { transactionId: item.transactionId },
         }).catch(e => console.error('[staff-queue PATCH] notification error:', e));
       }
     }
@@ -800,10 +822,10 @@ export async function PATCH(
 
         if (action === 'approve') {
           tcTitle = 'Transaction Approved by Staff';
-          tcBody = `${reviewerName} approved the transaction at ${txAddress}.`;
+          tcBody = `${reviewerName} approved the transaction at ${txAddress}.${detailSuffix}`;
         } else if (action === 'complete') {
           tcTitle = 'Staff Review Complete';
-          tcBody = `Staff completed the review for ${txAddress}.`;
+          tcBody = `Staff completed the review for ${txAddress}.${detailSuffix}`;
         } else if (action === 'dismiss') {
           tcTitle = 'Staff Queue Item Dismissed';
           tcBody = `Staff dismissed the queue item for ${txAddress}.`;
@@ -811,8 +833,10 @@ export async function PATCH(
           tcTitle = 'Staff Started Reviewing';
           tcBody = `${reviewerName} started reviewing ${txAddress}.`;
         } else if (action === 'save' || txUpdates) {
-          tcTitle = 'Staff Updated Transaction';
-          tcBody = `${reviewerName} made updates to ${txAddress}.`;
+          tcTitle = transactionChangeSummary?.hasChanges
+            ? `Staff Updated Transaction — ${transactionChangeSummary.sectionLabel}`
+            : 'Staff Updated Transaction';
+          tcBody = `${reviewerName} made updates to ${txAddress}.${detailSuffix}`;
         } else if (checklist && Array.isArray(checklist) && checklist.some((c: any) => c.completed)) {
           tcTitle = 'Staff Checklist Updated';
           tcBody = `${reviewerName} completed a checklist task for ${txAddress}.`;
@@ -825,11 +849,14 @@ export async function PATCH(
           const tcUids = await getTcUids(adminDb);
           if (tcUids.length > 0) {
             await sendNotification(adminDb, {
-              type: 'staff_queue_resolved',
+              type: transactionChangeSummary?.hasChanges ? 'transaction_change_details' : 'staff_queue_resolved',
               recipientUids: tcUids,
               title: tcTitle,
               body: tcBody,
-              url: '/dashboard/admin/tc',
+              url: transactionDetailUrl,
+              data: transactionChangeSummary?.hasChanges
+                ? { transactionId: item.transactionId, changedFields: transactionChangeSummary.changedFields.join(','), section: transactionChangeSummary.section }
+                : { transactionId: item.transactionId },
             });
           }
         }

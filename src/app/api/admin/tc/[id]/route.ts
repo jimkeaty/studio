@@ -25,6 +25,7 @@ import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
 import { hasOpenAccountingCloseout, isClosedTransactionStatus } from '@/lib/transactions/accountingCloseout';
+import { buildTransactionChangeSummary, transactionChangeUrl } from '@/lib/transactions/changeSummary';
 
 function serializeFirestore(val: any): any {
   if (val == null) return val;
@@ -519,6 +520,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // Fields that are intake-only (workflow status, checklist, etc.) are excluded.
       const linkedTxId = toOptStr(intake.approvedTransactionId);
       let persistedTransaction: Record<string, any> | null = null;
+      let transactionChangeSummary: ReturnType<typeof buildTransactionChangeSummary> | null = null;
       if (linkedTxId) {
         // Sync ALL editable fields to the transactions document (single source of truth).
         // Since transactions is now the canonical record, every TC edit must be mirrored there.
@@ -724,6 +726,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
             ...serializeFirestore(persistedTransactionSnap.data() || {}),
           };
           persistedTransaction = verifiedTransaction;
+          transactionChangeSummary = buildTransactionChangeSummary(
+            currentTxForUpdate,
+            verifiedTransaction,
+            Object.keys(updates),
+          );
         } catch (syncErr: any) {
           if (body.expectedTransactionUpdatedAt && syncErr?.code === 9) {
             return jsonError(409, 'This transaction was changed by another authorized user. Refresh the file before saving your changes.');
@@ -757,6 +764,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       // been written and read back successfully. This prevents the queue from
       // displaying a value that the ledger, accounting, or agent view lacks.
       await docRef.update(updates);
+      const verifiedIntakeSnap = await docRef.get();
+      const verifiedIntakeForSummary = verifiedIntakeSnap.exists
+        ? serializeFirestore(verifiedIntakeSnap.data() || {})
+        : { ...intake, ...updates };
+      const verifiedChangeSummary = transactionChangeSummary || buildTransactionChangeSummary(
+        intake,
+        verifiedIntakeForSummary,
+        Object.keys(updates),
+      );
 
       // Notify agent that TC has edited their transaction
       void (async () => {
@@ -767,11 +783,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           const intakeAddress = String(intake?.address || intake?.propertyAddress || 'your transaction').trim();
           if (agentUid) {
             await sendNotification(adminDb, {
-              type: 'tc_approved',
+              type: verifiedChangeSummary.hasChanges ? 'transaction_change_details' : 'tc_approved',
               recipientUids: [agentUid],
-              title: 'TC Updated Your Transaction',
-              body: `Your TC coordinator made updates to ${intakeAddress}.`,
-              url: '/dashboard/transactions',
+              title: verifiedChangeSummary.hasChanges
+                ? `TC Updated Your Transaction — ${verifiedChangeSummary.sectionLabel}`
+                : 'TC Updated Your Transaction',
+              body: verifiedChangeSummary.hasChanges
+                ? `Your TC coordinator made updates to ${intakeAddress}.\n\n${verifiedChangeSummary.body}`
+                : `Your TC coordinator made updates to ${intakeAddress}.`,
+              url: linkedTxId && verifiedChangeSummary.hasChanges
+                ? transactionChangeUrl(linkedTxId, verifiedChangeSummary.section)
+                : '/dashboard/transactions',
+              data: verifiedChangeSummary.hasChanges
+                ? { transactionId: linkedTxId || '', changedFields: verifiedChangeSummary.changedFields.join(','), section: verifiedChangeSummary.section }
+                : { transactionId: linkedTxId || '' },
             });
           }
         } catch (e) { console.error('[TC update] notification error:', e); }

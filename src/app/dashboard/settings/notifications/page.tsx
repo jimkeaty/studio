@@ -41,6 +41,7 @@ type NotificationType =
   | 'tx_status_change'
   | 'tx_new_agent'
   | 'transaction_activity_digest'
+  | 'transaction_change_details'
   | 'system';
 
 // ─── Transaction notification prefs ─────────────────────────────────────────
@@ -212,6 +213,11 @@ const EVENT_GROUPS: { label: string; description: string; events: EventMeta[] }[
         type: 'transaction_activity_digest',
         label: 'Daily Routine Activity Digest',
         description: 'One email grouped by property when Staff or TC completes or reopens routine checklist items on your transactions',
+      },
+      {
+        type: 'transaction_change_details',
+        label: 'Detailed Transaction Changes',
+        description: 'When an agent, Staff member, or TC saves transaction changes; the alert identifies the changed fields and opens the relevant form section',
       },
     ],
   },

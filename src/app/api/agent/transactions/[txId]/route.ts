@@ -20,6 +20,7 @@ import { buildCooperatingCommissionUpdate } from '@/lib/transactions/cooperating
 import { applyReferralIncomeFinancials } from '@/lib/transactions/referralIncome';
 import { normalizePercentageCommissionMethod } from '@/lib/transactions/commissionMethodRecovery';
 import { normalizeListingMediaFolderUrl } from '@/lib/transactions/listingMediaFolder';
+import { buildTransactionChangeSummary, transactionChangeUrl } from '@/lib/transactions/changeSummary';
 
 function jsonError(status: number, error: string) {
   return NextResponse.json({ ok: false, error }, { status });
@@ -558,6 +559,20 @@ export async function PATCH(
       throw error;
     }
 
+    // Build notifications from the canonical record only after the write has
+    // completed and been read back. This prevents a recipient from being told
+    // about a draft value that did not survive a concurrent protected save.
+    const persistedTxSnapForNotifications = await txRef.get();
+    if (!persistedTxSnapForNotifications.exists) {
+      return jsonError(500, 'Transaction save could not be verified');
+    }
+    const persistedTxForNotifications = persistedTxSnapForNotifications.data() || {};
+    const persistedChangeSummary = buildTransactionChangeSummary(
+      txData,
+      persistedTxForNotifications,
+      Object.keys(updates),
+    );
+
     // ── Staff Queue: notify staff based on transaction type and status change ──
     // Rules:
     //   - Listing/dual transactions: notify on any MLS status change
@@ -846,7 +861,7 @@ export async function PATCH(
           if (staffUids.length > 0) {
             let staffTitle = 'Transaction Status Updated';
             let staffBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
-            let staffUrl = '/dashboard/admin/staff-queue';
+            const staffUrl = transactionChangeUrl(txId, persistedChangeSummary.section);
 
             if (isComingSoon) {
               staffTitle = 'New Coming Soon Listing — Add to MLS as Coming Soon';
@@ -866,6 +881,9 @@ export async function PATCH(
             } else if (isPendingToBackOnMarket) {
               staffTitle = 'Listing Back on Market';
               staffBody = `${agentName}'s listing at ${txAddress} is back on market (was Pending).`;
+            }
+            if (persistedChangeSummary.hasChanges) {
+              staffBody += `\n\n${persistedChangeSummary.body}`;
             }
 
             await sendNotification(adminDb, {
@@ -900,7 +918,7 @@ export async function PATCH(
             if (tcRecipients.length > 0) {
               let tcTitle = 'Transaction Status Updated';
               let tcBody = `${agentName} changed ${txAddress} from ${prevLabel} to ${newLabel}.`;
-              let tcUrl = '/dashboard/admin/tc';
+              const tcUrl = transactionChangeUrl(txId, persistedChangeSummary.section);
 
               if (isComingSoon) {
                 tcTitle = 'New Coming Soon Listing — Add to MLS as Coming Soon';
@@ -920,6 +938,9 @@ export async function PATCH(
               } else if (isPendingToBackOnMarket) {
                 tcTitle = 'Transaction Back on Market';
                 tcBody = `${agentName}'s transaction at ${txAddress} is back on market (was Pending). Please update MLS.`;
+              }
+              if (persistedChangeSummary.hasChanges) {
+                tcBody += `\n\n${persistedChangeSummary.body}`;
               }
 
               await sendNotification(adminDb, {
@@ -972,134 +993,13 @@ export async function PATCH(
               type: 'tc_new_intake',
               recipientUids: tcUids,
               title: tcQueueUpdate.reopened ? 'Transaction Reopened for TC Review' : 'New TC Intake Submitted',
-              body: `${agentName} updated ${txAddress}; the existing TC queue item is ready for review.`,
+              body: `${agentName} updated ${txAddress}; the existing TC queue item is ready for review.${persistedChangeSummary.hasChanges ? `\n\n${persistedChangeSummary.body}` : ''}`,
               url: `/dashboard/admin/tc/${tcQueueUpdate.id}`,
               data: { transactionId: txId, tcIntakeId: tcQueueUpdate.id },
             });
           }
         }
 
-        // ── Document uploaded: notify staff always + TC when TC-managed ────────────
-        if (updates.documents !== undefined && !_replaceDocuments) {
-          const prevDocs: any[] = Array.isArray(txData.documents) ? txData.documents : [];
-          const newDocs: any[] = Array.isArray(updates.documents) ? updates.documents : [];
-          if (newDocs.length > prevDocs.length) {
-            const addedCount = newDocs.length - prevDocs.length;
-            const docBody = `${agentName} uploaded ${addedCount === 1 ? 'a document' : `${addedCount} documents`} to ${txAddress}.`;
-            // Staff always notified on document uploads
-            const staffUids = await getAllStaffUids(adminDb);
-            if (staffUids.length > 0) {
-              await sendNotification(adminDb, {
-                type: 'tc_document_uploaded',
-                recipientUids: staffUids,
-                title: 'New Document Uploaded',
-                body: docBody,
-                url: '/dashboard/admin/staff-queue',
-                data: { transactionId: txId },
-              });
-            }
-            // TC also notified when TC-managed
-            if (isTcManaged) {
-              const tcUids = await getTcUids(adminDb);
-              // Exclude UIDs already notified as staff to avoid duplicates
-              const staffSet = new Set(staffUids);
-              const tcOnly = tcUids.filter(u => !staffSet.has(u));
-              if (tcOnly.length > 0) {
-                await sendNotification(adminDb, {
-                  type: 'tc_document_uploaded',
-                  recipientUids: tcOnly,
-                  title: 'New Document Uploaded',
-                  body: docBody,
-                  url: '/dashboard/admin/tc',
-                  data: { transactionId: txId },
-                });
-              }
-            }
-          }
-        }
-
-        // ── TC: meaningful field change ──────────────────────────────────────
-        const TC_WATCHED_FIELDS = new Set([
-          'propertyAddress', 'address',
-          'salePrice', 'listPrice', 'commissionPercent', 'commissionBasePrice', 'gci',
-          'transactionFee', 'sellerCommissionPct', 'buyerCommissionPct',
-          'closingDate', 'closedDate', 'contractDate', 'listingDate',
-          'optionExpiration', 'inspectionDeadline', 'projectedCloseDate',
-          'clientName', 'clientEmail', 'clientPhone',
-          'sellerName', 'sellerEmail', 'sellerPhone',
-          'buyerName', 'buyerEmail', 'buyerPhone',
-          'mortgageCompany', 'loanOfficer', 'loanOfficerEmail', 'loanOfficerPhone',
-          'titleCompany', 'titleOfficer', 'titleOfficerEmail', 'titleOfficerPhone',
-          'otherAgentName', 'otherAgentEmail', 'otherAgentPhone', 'otherAgentBrokerage',
-          'notes', 'additionalComments',
-          'dealType', 'transactionType', 'closingType',
-        ]);
-        // Human-readable labels for watched fields
-        const FIELD_LABELS: Record<string, string> = {
-          propertyAddress: 'Property Address', address: 'Property Address',
-          salePrice: 'Sale Price', listPrice: 'List Price',
-          commissionPercent: 'Commission %', commissionBasePrice: 'Commission Base Price',
-          gci: 'GCI', transactionFee: 'Transaction Fee',
-          sellerCommissionPct: 'Seller Commission %', buyerCommissionPct: 'Buyer Commission %',
-          closingDate: 'Closing Date', closedDate: 'Closed Date',
-          contractDate: 'Contract Date', listingDate: 'Listing Date',
-          optionExpiration: 'Option Expiration', inspectionDeadline: 'Inspection Deadline',
-          projectedCloseDate: 'Projected Close Date',
-          clientName: 'Client Name', clientEmail: 'Client Email', clientPhone: 'Client Phone',
-          sellerName: 'Seller Name', sellerEmail: 'Seller Email', sellerPhone: 'Seller Phone',
-          buyerName: 'Buyer Name', buyerEmail: 'Buyer Email', buyerPhone: 'Buyer Phone',
-          mortgageCompany: 'Mortgage Company', loanOfficer: 'Loan Officer',
-          loanOfficerEmail: 'Loan Officer Email', loanOfficerPhone: 'Loan Officer Phone',
-          titleCompany: 'Title Company', titleOfficer: 'Title Officer',
-          titleOfficerEmail: 'Title Officer Email', titleOfficerPhone: 'Title Officer Phone',
-          otherAgentName: 'Co-Agent Name', otherAgentEmail: 'Co-Agent Email',
-          otherAgentPhone: 'Co-Agent Phone', otherAgentBrokerage: 'Co-Agent Brokerage',
-          notes: 'Notes', additionalComments: 'Additional Comments',
-          dealType: 'Deal Type', transactionType: 'Transaction Type', closingType: 'Closing Type',
-        };
-        const watchedFieldsChanged = Object.keys(updates).some(k => TC_WATCHED_FIELDS.has(k));
-        // Only fire when no status change and no document change (those are handled above)
-        if (
-          watchedFieldsChanged &&
-          !isStatusChange &&
-          updates.documents === undefined
-        ) {
-          const changedKeys = Object.keys(updates).filter(k => TC_WATCHED_FIELDS.has(k));
-          const changedLabels = changedKeys
-            .slice(0, 4)
-            .map(k => FIELD_LABELS[k] || k)
-            .join(', ');
-          const moreCount = changedKeys.length - 4;
-          const fieldBody = `${agentName} updated the following on ${txAddress}: ${changedLabels}${moreCount > 0 ? ` and ${moreCount} more field${moreCount > 1 ? 's' : ''}` : ''}.`;
-          // Staff always notified on field changes
-          const staffUids = await getAllStaffUids(adminDb);
-          if (staffUids.length > 0) {
-            await sendNotification(adminDb, {
-              type: 'tc_field_update',
-              recipientUids: staffUids,
-              title: 'Transaction Details Updated',
-              body: fieldBody,
-              url: '/dashboard/admin/staff-queue',
-              data: { transactionId: txId },
-            });
-          }
-          // TC also notified when TC-managed
-          if (isTcManaged) {
-            const tcUids = await getTcUids(adminDb);
-            const staffSet = new Set(staffUids);
-            const tcOnly = tcUids.filter(u => !staffSet.has(u));
-            if (tcOnly.length > 0) {
-              await sendNotification(adminDb, {
-                type: 'tc_field_update',
-                recipientUids: tcOnly,
-                title: 'Transaction Details Updated',
-                body: fieldBody,
-                url: '/dashboard/admin/tc',
-                data: { transactionId: txId },
-              });
-            }
-          }
-        }
       } catch (notifErr) {
         console.error('[agent PATCH] notification error:', notifErr);
       }
@@ -1134,23 +1034,16 @@ export async function PATCH(
       })();
     }
 
-    // ── Agent-change alert: set banner on active checklists and notify staff ────
-    // Fires on any field edit or document upload (regardless of TC assignment)
+    // ── Agent-change alert: set banner and send the verified change list ──────
+    // Status changes above already send the richer status-specific notification.
+    // All other saves use this one detail alert instead of a separate vague
+    // document alert plus a generic "please review" message.
     void (async () => {
       try {
-        const isDocUpload = updates.documents !== undefined && !_replaceDocuments;
-        const isFieldEdit = Object.keys(updates).some(k =>
-          !['status', 'documents', 'updatedAt', 'lastUpdatedBy'].includes(k)
-        );
-        if (isDocUpload || isFieldEdit) {
+        const isStatusChange = String(txData.status || '') !== String(persistedTxForNotifications.status || '');
+        if (persistedChangeSummary.hasChanges && !isStatusChange) {
           const txAddress = String(txData.propertyAddress || txData.address || 'a transaction');
           const agentName = String(txData.agentDisplayName || 'Agent');
-          // Use clear, distinct language for document uploads vs transaction field edits
-          const changeDesc = isDocUpload && !isFieldEdit
-            ? 'uploaded a new document'
-            : isFieldEdit && !isDocUpload
-            ? 'updated the transaction details'
-            : 'updated the transaction and uploaded a document';
 
           // Set agentUpdateBanner on all active checklists for this transaction
           const checklistSnap = await adminDb.collection('transactionChecklists')
@@ -1160,7 +1053,7 @@ export async function PATCH(
           const bannerUpdate = {
             agentUpdateBanner: true,
             agentUpdateAt: new Date().toISOString(),
-            agentUpdateDescription: `${agentName} ${changeDesc}`,
+            agentUpdateDescription: `${agentName} updated ${persistedChangeSummary.sectionLabel}`,
             updatedAt: new Date().toISOString(),
           };
           for (const cl of checklistSnap.docs) {
@@ -1171,26 +1064,29 @@ export async function PATCH(
           const staffUids = await getAllStaffUids(adminDb);
           if (staffUids.length > 0) {
             await sendNotification(adminDb, {
-              type: 'agent_tx_updated',
+              type: 'transaction_change_details',
               recipientUids: staffUids,
-              title: 'Transaction Updated — Please Review',
-              body: `${agentName} ${changeDesc} on ${txAddress}.`,
-              url: '/dashboard/admin/staff-queue',
-              data: { transactionId: txId },
+              title: `Transaction Updated — ${persistedChangeSummary.sectionLabel}`,
+              body: `${agentName} updated ${txAddress}.\n\n${persistedChangeSummary.body}`,
+              url: transactionChangeUrl(txId, persistedChangeSummary.section),
+              data: { transactionId: txId, changedFields: persistedChangeSummary.changedFields.join(','), section: persistedChangeSummary.section },
             });
           }
 
-          // Also notify TC if working with TC
-          if (shouldRefreshTcQueue) {
+          // A TC queue create/reopen above is already a detailed TC alert. Do
+          // not send a second notice for the same save.
+          if (shouldRefreshTcQueue && !tcQueueUpdate) {
             const tcUids = await getTcUids(adminDb);
-            if (tcUids.length > 0) {
+            const staffSet = new Set(staffUids);
+            const tcOnly = tcUids.filter(uid => !staffSet.has(uid));
+            if (tcOnly.length > 0) {
               await sendNotification(adminDb, {
-                type: 'agent_tx_updated',
-                recipientUids: tcUids,
-                title: 'Transaction Updated — Please Review',
-                body: `${agentName} ${changeDesc} on ${txAddress}.`,
-                url: '/dashboard/admin/tc',
-                data: { transactionId: txId },
+                type: 'transaction_change_details',
+                recipientUids: tcOnly,
+                title: `Transaction Updated — ${persistedChangeSummary.sectionLabel}`,
+                body: `${agentName} updated ${txAddress}.\n\n${persistedChangeSummary.body}`,
+                url: transactionChangeUrl(txId, persistedChangeSummary.section),
+                data: { transactionId: txId, changedFields: persistedChangeSummary.changedFields.join(','), section: persistedChangeSummary.section },
               });
             }
           }

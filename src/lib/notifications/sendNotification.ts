@@ -49,6 +49,7 @@ export type NotificationType =
   | 'checklist_note_added'            // staff/TC added a note to checklist item → agent notified
   | 'transaction_activity_digest'     // routine Staff/TC activity grouped into one daily agent email
   | 'agent_tx_updated'                // agent updated transaction → staff/TC notified
+  | 'transaction_change_details'      // verified field-level transaction changes → appropriate reviewer
   | 'commission_summary_prepare'      // 5 days before closing → TC/Staff to prepare summary
   | 'commission_summary_send'         // 3 days before closing → TC/Staff to send summary to agent
   | 'agent_task_reminder'             // weekly hug, post-closing check-in reminders → agent
@@ -397,6 +398,7 @@ function buildEmailHtml(
     broker_question_answered:       'Broker Response',
     transaction_activity_digest:    'Daily Transaction Activity',
     agent_tx_updated:               'Transaction Updated',
+    transaction_change_details:     'Transaction Change Details',
     commission_summary_prepare:     'Commission Summary',
     commission_summary_send:        'Commission Summary',
     agent_task_reminder:            'Task Reminder',
