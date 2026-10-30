@@ -2,8 +2,7 @@
 
 ## Live verification status
 
-**Verified in the Google Cloud Console on October 14, 2026 and rechecked on October 15, 2026.** No backup, retention, or point-in-time recovery setting was changed during either verification.
-
+**Verified in the Google Cloud Console on October 14, October 15, and October 29, 2026.** No backup, retention, or point-in-time recovery setting was changed during any verification.
 The live Firestore database has active scheduled backups and point-in-time recovery. The prior documentation understated the protection in place: it listed only daily backups and an unverified approximate run time.
 
 ## Live protection policy
@@ -20,9 +19,9 @@ The live Firestore database has active scheduled backups and point-in-time recov
 > **Important:** Google charges for both scheduled backup storage and PITR storage. The existing settings are already active; no new billing configuration was applied during the October 14 verification.
 
 ## Current recovery evidence
+The fresh **October 29, 2026** read-only console check showed that scheduled backups continue to advance: the newest daily snapshot was created at **7:32:38 AM GMT-5** and expires **November 28, 2026 at 6:32:38 AM GMT-6**. Consecutive preceding daily snapshots appeared on October 28 and October 27. The October 25 snapshot also has a Sunday weekly-retention copy expiring **January 31, 2027**, confirming the longer weekly schedule is active. The PITR panel reported an earliest available version time of **October 22, 2026 at 7:23:00 PM UTC-5**.
 
-The October 15 console check showed consecutive retained snapshots, including a new daily backup created on **October 15, 2026 at 5:35:02 AM GMT-5** (expiring **November 14, 2026 at 4:35:02 AM GMT-6**). The immediately preceding snapshots were October 14 at 5:28:02 AM and October 13 at 5:18:58 AM GMT-5. The PITR panel reported an earliest available version time of **October 8, 2026 at 5:30:00 PM UTC-5**.
-
+The earlier October 15 console check had likewise shown consecutive retained snapshots, including the October 15 daily backup created at 5:35:02 AM GMT-5.
 This confirms the recovery service is currently creating and retaining backups. It does **not** retroactively recreate a transaction that was deleted before the relevant recovery window or backup availability.
 
 ## Historical schedule reference
